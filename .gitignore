@@ -1,0 +1,8 @@
+
+*.pyc
+*.pyo
+*~
+*.log
+*.swp
+*.db
+Thumbs.db
