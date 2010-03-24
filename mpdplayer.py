@@ -1,5 +1,6 @@
 import socket
 import threading
+import collections
 
 from euphony import util, mpdclient
 from euphony.config import current as config
@@ -14,23 +15,51 @@ itemcache = {}
 class InvalidItemError(ValueError):
     pass
 
+class property_getter(object):
+    def __init__(self, prop_name):
+        self.prop_name = prop_name
+
+    def __call__(self, func):
+        func.prop_type = 'get'
+        if hasattr(func, 'prop_name'):
+            func.prop_name.append(self.prop_name)
+        else:
+            func.prop_name = [self.prop_name]
+        return func
+
+class property_setter(object):
+    def __init__(self, prop_name):
+        self.prop_name = prop_name
+
+    def __call__(self, func):
+        func.prop_type = 'set'
+        if hasattr(func, 'prop_name'):
+            func.prop_name.append(self.prop_name)
+        else:
+            func.prop_name = self.prop_name
+        return func
+
+class PropertyMeta(type):
+    def __init__(cls, name, bases, attrs):
+        props = collections.defaultdict(dict)
+        for (k, v) in attrs.iteritems():
+            if hasattr(v, 'prop_name') and hasattr(v, 'prop_type'):
+                for n in v.prop_name:
+                    props[v.prop_type][n] = v
+        cls._properties = props
+
 class PropertyMixin(object):
-    gettable_properties = {}
-    settable_properties = {}
+    __metaclass__ = PropertyMeta
 
     def get_property(self, name):
         try:
-            prop = self.gettable_properties[name]
-            if callable(prop):
-                return prop()
-            else:
-                return prop
+            return self._properties['get'][name](self)
         except KeyError:
             return None
 
     def set_property(self, name, value):
         try:
-            return self.settable_properties[name](value)
+            return self._properties['set'][name](value)
         except KeyError:
             return None
 
@@ -65,10 +94,13 @@ class CachedIDMixin(object):
                     return cls(id=k, **kwargs)
         except KeyError:
             pass
+            
         if itemtype not in itemcache:
             itemcache[itemtype] = {}
+            
         obj_id = 1 + len(itemcache[itemtype])
         itemcache[itemtype][obj_id] = kwargs
+        
         return cls(id=obj_id, **kwargs)
 
 class Container(PropertyMixin, CachedIDMixin):
@@ -76,16 +108,8 @@ class Container(PropertyMixin, CachedIDMixin):
         self.id = id
         self.name = name
         self.is_base = is_base
-
-        self.gettable_properties = {
-            'dmap.itemname': self.name,
-            'dmap.itemcount': self.get_item_count,
-            'dmap.itemid': self.id,
-            'dmap.persistentid': self.id,
-            'dmap.parentcontainerid': 1,
-            'dmap.editcommandssupported': 3,
-            'daap.baseplaylist': self.is_base,
-        }
+        self.parent_container_id = 1
+        self.edit_commands_supported = 3
 
     def __str__(self):
         return 'Container: %s' % self.name
@@ -100,22 +124,39 @@ class Container(PropertyMixin, CachedIDMixin):
             items = mpd.client.listplaylistinfo(self.name)
         return [Item.find(name=i['title'], artist=i['artist'], album=i['album']) for i in items]
 
+    @property_getter('dmap.itemname')
+    def get_name(self):
+        return self.name
+
+    @property_getter('dmap.itemid')
+    @property_getter('dmap.persistentid')
+    def get_id(self):
+        return self.id
+
+    @property_getter('dmap.itemcount')
     def get_item_count(self):
         if self.is_base:
             return len([item for item in mpd.client.listall('/') if 'title' in item])
         else:
             return len(mpd.client.listplaylist(self.name))
 
+    @property_getter('dmap.parentcontainerid')
+    def get_parent_container_id(self):
+        return self.parent_container_id
+
+    @property_getter('dmap.editcommandssupported')
+    def get_edit_commands_supported(self):
+        return self.edit_commands_supported
+
+    @property_getter('daap.baseplaylist')
+    def get_is_base_playlist(self):
+        return self.is_base
+
+
 class Artist(PropertyMixin, CachedIDMixin):
     def __init__(self, id, name, **kwargs):
         self.id = id
         self.name = name
-
-        self.gettable_properties = {
-            'dmap.itemname': self.name,
-            'dmap.itemid': self.id,
-            'dmap.persistentid': self.id,
-        }
 
     def __str__(self):
         return 'Artist: %s' % self.name
@@ -123,20 +164,20 @@ class Artist(PropertyMixin, CachedIDMixin):
     def __unicode__(self):
         return u'Artist: %s' % self.name
 
+    @property_getter('dmap.itemname')
+    def get_name(self):
+        return self.name
+
+    @property_getter('dmap.itemid')
+    @property_getter('dmap.persistentid')
+    def get_id(self):
+        return self.id
+
 class Album(PropertyMixin, CachedIDMixin):
     def __init__(self, id, name, artist, **kwargs):
         self.id = id
         self.name = name
         self.artist = Artist.find(name=artist)
-
-        self.gettable_properties = {
-            'dmap.itemname': self.name,
-            'dmap.itemid': self.id,
-            'dmap.persistentid': self.id,
-            'daap.songalbumartist': self.artist.name,
-            'daap.songartist': self.artist.name,
-            'dmap.itemcount': self.get_item_count,
-        }
 
     def __str__(self):
         return 'Album: %s' % self.name
@@ -144,6 +185,21 @@ class Album(PropertyMixin, CachedIDMixin):
     def __unicode__(self):
         return u'Album: %s' % self.name
 
+    @property_getter('dmap.itemname')
+    def get_name(self):
+        return self.name
+
+    @property_getter('dmap.itemid')
+    @property_getter('dmap.persistentid')
+    def get_id(self):
+        return self.id
+
+    @property_getter('daap.songalbumartist')
+    @property_getter('daap.songartist')
+    def get_artist_name(self):
+        return self.artist.name,
+
+    @property_getter('dmap.itemcount')
     def get_item_count(self):
             return len(mpd.client.list('title', 'album', self.name))
 
@@ -153,25 +209,53 @@ class Item(PropertyMixin, CachedIDMixin):
         self.name = name
         self.artist = Artist.find(name=artist)
         self.album = Album.find(name=album, artist=artist)
-
-        self.gettable_properties = {
-            'dmap.itemname': self.name,
-            'dmap.itemid': self.id,
-            'dmap.persistentid': self.id,
-            'dmap.itemkind': 2,
-            'daap.songalbum': self.album.name,
-            'daap.songalbumid': self.album.id,
-            'daap.songartist': self.artist.name,
-            'dmap.containeritemid': 1,
-            'daap.songcontentdescription': '',
-            'com.apple.itunes.has-video': 0,
-        }
+        self.item_kind = 2
+        self.container_id = 1
+        self.content_description = ''
+        self.has_video = 0
 
     def __str__(self):
         return 'Item: %s' % self.name
 
     def __unicode__(self):
         return u'Item: %s' % self.name
+
+    @property_getter('dmap.itemname')
+    def get_name(self):
+        return self.name
+
+    @property_getter('dmap.itemid')
+    @property_getter('dmap.persistentid')
+    def get_id(self):
+        return self.id
+
+    @property_getter('dmap.itemkind')
+    def get_item_kind(self):
+        return self.item_kind
+
+    @property_getter('daap.songalbum')
+    def get_album_name(self):
+        return self.album.name
+
+    @property_getter('daap.songalbumid')
+    def get_album_id(self):
+        return self.album.id
+
+    @property_getter('daap.songartist')
+    def get_artist(self):
+        return self.artist.name
+
+    @property_getter('dmap.containeritemid')
+    def get_container_id(self):
+        return self.container_id
+
+    @property_getter('daap.songcontentdescription')
+    def get_content_description(self):
+        return self.content_description
+
+    @property_getter('com.apple.itunes.has-video')
+    def get_has_video(self):
+        return self.has_video
 
 class MPDIdler(threading.Thread, MPDMixin):
     def __init__(self, host, port, password=None):
@@ -216,22 +300,6 @@ class MPD(PropertyMixin, MPDMixin):
         self._update_callbacks = {}
         self._update_callbacks_lock = threading.Lock()
 
-        self.gettable_properties = {
-            'dmcp.volume': self.get_volume,
-            'dacp.playerstate': self.get_player_state,
-            'dacp.shufflestate': self.get_shuffle_state,
-            'dacp.repeatstate': self.get_repeat_state,
-            'dacp.availableshufflestates': 2,
-            'dacp.availablerepeatstates': 2,#6,
-            'dacp.volumecontrollable': 1,
-            'dacp.nowplaying': self.get_nowplaying_info,
-            'daap.songalbumid': self.get_current_album_id,
-        }
-
-        self.settable_properties = {
-            'dmcp.volume': self.set_volume,
-        }
-
         self.idler = MPDIdler(host, port, password)
         self.idler.register_callback(self._update_event)
         self.idler.start()
@@ -274,12 +342,14 @@ class MPD(PropertyMixin, MPDMixin):
     def play(self):
         self.client.play()
 
+    @property_getter('dacp.nowplaying')
     def get_nowplaying_info(self):
         rootpl_id = 25
         album_id = 50
         song_id = 75
         return (1, rootpl_id, album_id, song_id)
 
+    @property_getter('dacp.playerstate')
     def get_player_state(self):
         status = self.client.status()
         try:
@@ -291,6 +361,7 @@ class MPD(PropertyMixin, MPDMixin):
         except KeyError:
             return PLAYER_STATE_STOPPED
 
+    @property_getter('dacp.repeatstate')
     def get_repeat_state(self):
         status = self.client.status()
         if status['single'] == '1':
@@ -300,6 +371,11 @@ class MPD(PropertyMixin, MPDMixin):
         else:
             return REPEAT_STATE_OFF
 
+    @property_getter('dacp.available_repeat_states')
+    def get_available_shuffle_states(self):
+        return AVAILABLE_REPEAT_STATES
+
+    @property_getter('dacp.shufflestate')
     def get_shuffle_state(self):
         status = self.client.status()
         if status['random'] == '1':
@@ -307,9 +383,19 @@ class MPD(PropertyMixin, MPDMixin):
         else:
             return SHUFFLE_STATE_OFF
 
+    @property_getter('dacp.availableshufflestates')
+    def get_available_shuffle_states(self):
+        return AVAILABLE_SHUFFLE_STATES
+
+    @property_getter('dacp.volumecontrollable')
+    def get_volume_controllable(self):
+        return VOLUME_CONTROLLABLE
+
+    @property_getter('dmcp.volume')
     def get_volume(self):
         return int(self.client.status()['volume'])
 
+    @property_setter('dmcp.volume')
     def set_volume(self, value):
         self.client.setvol(str(value))
 
@@ -323,6 +409,7 @@ class MPD(PropertyMixin, MPDMixin):
         except TypeError:
             return (0, 0)
 
+    @property_getter('daap.songalbumid')
     def get_current_album_id(self):
         songinfo = self.client.currentsong()
         return Album.find(name=songinfo['title'], artist=songinfo['artist']).id

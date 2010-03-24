@@ -22,6 +22,9 @@ def apply_parameter(parameter, collection):
     try:
         result = PARAMETER_REGEX.match(parameter).groupdict()
 
+        if tuple(collection)[0].get_property(result['property']) is None:
+            return collection
+
         value = urllib.unquote_plus(result['value'])
         try:
             value = int(value)
@@ -31,10 +34,24 @@ def apply_parameter(parameter, collection):
             except ValueError:
                 pass
 
+        cmpfunc = lambda x, y: x == y
+        
+        try:
+            if value[0] == value[-1] == '*':
+                cmpfunc = lambda x, y: x in y
+            elif value[0] == '*':
+                cmpfunc = lambda x, y: y.endswith(x)
+            elif value[-1] == '*':
+                cmpfunc = lambda x, y: y.startswith(x)
+
+            value = value.strip('*')
+        except TypeError:
+            pass
+
         if result['operator'] == TOKEN_EQUAL:
-            return frozenset([x for x in collection if x.get_property(result['property']) in (value, None)])
+            return frozenset([x for x in collection if cmpfunc(value, x.get_property(result['property']))])
         elif result['operator'] == TOKEN_NOTEQUAL:
-            return frozenset([x for x in collection if x.get_property(result['property']) != value])
+            return frozenset([x for x in collection if not cmpfunc(value, x.get_property(result['property']))])
         else:
             raise QuerySyntaxError('Invalid operator: %r' % result['operator'])
     except AttributeError, e:
