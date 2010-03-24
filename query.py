@@ -32,9 +32,9 @@ def apply_parameter(parameter, collection):
                 pass
 
         if result['operator'] == TOKEN_EQUAL:
-            return set([x for x in collection if x.get_property(result['property']) in (value, None)])
+            return frozenset([x for x in collection if x.get_property(result['property']) in (value, None)])
         elif result['operator'] == TOKEN_NOTEQUAL:
-            return set([x for x in collection if x.get_property(result['property']) != value])
+            return frozenset([x for x in collection if x.get_property(result['property']) != value])
         else:
             raise QuerySyntaxError('Invalid operator: %r' % result['operator'])
     except AttributeError, e:
@@ -49,7 +49,7 @@ def apply_operator(op, left, right):
         raise QuerySyntaxError('Invalid operator: %r' % op)
 
 def handle_group(lexer, collection):
-    result = set()
+    result = frozenset()
 
     while True:
         token = lexer.get_token()
@@ -73,7 +73,7 @@ def handle_group(lexer, collection):
 
 
 def apply_query(query, collection):
-    collection = set(collection)
+    collection = frozenset(collection)
     lexer = shlex.shlex(StringIO.StringIO(query.replace(' ', '+')))
 
     token = lexer.get_token()

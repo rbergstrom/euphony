@@ -3,12 +3,13 @@ import threading
 
 from euphony import util, mpdclient
 from euphony.config import current as config
-from euphony.db import db
 from euphony.dacp.constants import *
 
 __all__ = ['MPD', 'Container', 'Album', 'Artist', 'mpd']
 
 SERVER_NAME = u'MPD@%s'
+
+itemcache = {}
 
 class InvalidItemError(ValueError):
     pass
@@ -49,25 +50,26 @@ class MPDMixin(object):
 class CachedIDMixin(object):
     @classmethod
     def get(cls, obj_id):
-        record = db.itemcache.find_one({
-            'item_type': cls.__name__.lower(),
-            'id': obj_id,
-        })
-        if record is not None:
-            return cls(**dict([(str(k), v) for (k, v) in record.iteritems()]))
-        else:
+        try:
+            record = itemcache[cls.__name__.lower()][obj_id]
+            return cls(id=obj_id, **record)
+        except KeyError:
             return None
 
     @classmethod
     def find(cls, **kwargs):
-        kwargs['item_type'] = cls.__name__.lower()
+        itemtype = cls.__name__.lower()
         try:
-            kwargs['id'] = db.itemcache.find_one(kwargs)['id']
-        except TypeError:
-            kwargs['id'] = 1 + db.itemcache.find({'item_type': kwargs['item_type']}).count()
-            db.itemcache.insert(kwargs)
-        return cls(**kwargs)
-
+            for (k, v) in itemcache[itemtype].iteritems():
+                if v == kwargs:
+                    return cls(id=k, **kwargs)
+        except KeyError:
+            pass
+        if itemtype not in itemcache:
+            itemcache[itemtype] = {}
+        obj_id = 1 + len(itemcache[itemtype])
+        itemcache[itemtype][obj_id] = kwargs
+        return cls(id=obj_id, **kwargs)
 
 class Container(PropertyMixin, CachedIDMixin):
     def __init__(self, id, name, is_base=False, **kwargs):
@@ -344,12 +346,5 @@ class MPD(PropertyMixin, MPDMixin):
             ])
 
         return util.sort_by_initial(albums, key=lambda x: x.name)
-
-    def get_album_by_id(self, album_id):
-        record = db.itemcache.find_one({'item_type': 'album', 'id': album_id})
-        if record is None:
-            raise InvalidItemError()
-        else:
-            return Album.find(name=record['name'], artist=record['artist'])
 
 mpd = MPD(str(config.mpd.host), int(config.mpd.port))

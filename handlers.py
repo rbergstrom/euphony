@@ -119,7 +119,7 @@ class ContainersHandler(DMAPRequestHandler):
         properties = self.get_argument('meta').split(',')
 
         container_nodes = [('mlit', parse_properties(properties, c)) for c in containers]
-
+        
         node = build_node(('aply', [
             ('mstt', 200),
             ('muty', 0),
@@ -196,7 +196,7 @@ class GroupArtHandler(DMAPRequestHandler):
         width = int(self.get_argument('mw', 55))
         height = int(self.get_argument('mh', 55))
         try:
-            album = mpd.get_album_by_id(int(group))
+            album = mpdplayer.Album.get(int(group))
             artwork = albumart.AlbumArt(album.name, album.artist)
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
