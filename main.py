@@ -25,6 +25,8 @@ class EuphonyServer(object):
             (r'/databases', handlers.DatabaseHandler),
             (r'/databases/([0-9]+)/containers', handlers.ContainersHandler),
             (r'/databases/([0-9]+)/containers/([0-9]+)/items', handlers.ContainerItemsHandler),
+            (r'/databases/([0-9]+)/containers/([0-9]+)/edit', handlers.ContainerEditHandler),
+            (r'/databases/([0-9]+)/edit', handlers.DatabaseEditHandler),
             (r'/databases/([0-9]+)/groups', handlers.GroupsHandler),
             (r'/databases/([0-9]+)/groups/([0-9]+)/extra_data/artwork', handlers.GroupArtHandler),
             (r'/databases/([0-9]+)/browse/artists', handlers.BrowseArtistHandler),
@@ -36,6 +38,8 @@ class EuphonyServer(object):
             (r'/ctrl-int/1/nowplayingartwork', handlers.NowPlayingArtHandler),
             (r'/ctrl-int/1/playpause', handlers.PlayPauseHandler),
             (r'/ctrl-int/1/pause', handlers.PauseHandler),
+            (r'/ctrl-int/1/nextitem', handlers.NextItemHandler),
+            (r'/ctrl-int/1/previtem', handlers.PrevItemHandler),
         ])
 
     def start_zeroconf(self):
@@ -70,6 +74,8 @@ if __name__ == '__main__':
     from tornado.httpserver import HTTPServer
     from tornado.ioloop import IOLoop
     import logging
+
+    #logging.basicConfig(level=logging.INFO)
 
     app = EuphonyServer()
     try:

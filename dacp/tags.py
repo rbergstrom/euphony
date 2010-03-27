@@ -198,6 +198,8 @@ _TAG_DATA = (
     ('ceSG', None, 'UByteValue'),
     ('casp', None, 'ContainerValue'),
     ('caia', None, 'UByteValue'),
+
+    ('medc', None, 'ContainerValue'),
 )
 
 TAGS = dict([(v[0], (v[1], v[2])) for v in _TAG_DATA])

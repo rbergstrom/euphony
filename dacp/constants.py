@@ -23,4 +23,6 @@ AVAILABLE_SHUFFLE_STATES = 2
 
 VOLUME_CONTROLLABLE = 1
 
+PARAMETER_REGEX = r"([^,+']+?)[:!]([^,+']+)"
+
 BASE_PLAYLIST = 'Library'

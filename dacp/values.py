@@ -91,7 +91,7 @@ class NumericValue(Value):
     def __init__(self, value):
         try:
             self.value = int(value)
-        except ValueError:
+        except Exception:
             raise TypeError('%s requires a numeric value' % self.__class__.__name__)
         if self.value < self.min_value or self.value > self.max_value:
             raise ValueError('%s requires %d <= value <= %d' % (
@@ -400,8 +400,6 @@ class NodeValue(Value):
             tagtype = BinaryValue
 
         data = tagtype.deserialize(data)
-            # print 'Error deserializing tag "%s" of type "%s" with data "%s"' % (tag, tagtype, repr(data))
-            # raise e
         return cls(tag, data)
 
     def pprint(self, depth=0):

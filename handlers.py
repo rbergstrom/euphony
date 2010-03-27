@@ -1,4 +1,5 @@
 import datetime
+import re
 
 from tornado import web
 
@@ -9,7 +10,13 @@ from euphony.dacp.values import build_node
 from euphony.dacp.constants import *
 from euphony.db import db
 
-__all__ = ['ServerInfoHandler']
+__all__ = [
+    'ServerInfoHandler', 'LoginHandler', 'UpdateHandler', 'DatabaseHandler', 'ContainersHandler',
+    'ContainerItemsHandler', 'GroupsHandler', 'GroupArtHandler', 'BrowseArtistHandler',
+    'ControlInterfaceHandler', 'GetSpeakerHandler', 'GetPropertyHandler', 'SetPropertyHandler',
+    'PlayStatusUpdateHandler', 'NowPlayingArtHandler', 'PlayPauseHandler', 'PauseHandler'
+    'DatabaseEditHandler', 'ContainerEditHandler',
+]
 
 mpd = mpdplayer.mpd
 
@@ -119,7 +126,7 @@ class ContainersHandler(DMAPRequestHandler):
         properties = self.get_argument('meta').split(',')
 
         container_nodes = [('mlit', parse_properties(properties, c)) for c in containers]
-        
+
         node = build_node(('aply', [
             ('mstt', 200),
             ('muty', 0),
@@ -133,15 +140,19 @@ class ContainersHandler(DMAPRequestHandler):
 class ContainerItemsHandler(DMAPRequestHandler):
     def get(self, db, container_id):
         properties = self.get_argument('meta').split(',')
-        sort_type = self.get_argument('sort')
-        query_type = self.get_argument('type')
-        query_string = self.get_argument('query')
+        sort_type = self.get_argument('sort', None)
+        query_type = self.get_argument('type', None)
+        query_string = self.get_argument('query', None)
 
         container = mpdplayer.Container.get(int(container_id))
+
         if container is None:
             raise web.HTTPError(400)
 
-        items = query.apply_query(query_string, container.fetch_items())
+        if query_string:
+            items = query.apply_query(query_string, container.fetch_items())
+        else:
+            items = container.fetch_items()
 
         item_nodes = [('mlit', parse_properties(properties, i)) for i in items]
 
@@ -154,6 +165,54 @@ class ContainerItemsHandler(DMAPRequestHandler):
         ]))
 
         self.write(node.serialize())
+
+class ContainerEditHandler(DMAPRequestHandler):
+    def get(self, db, container_id):
+        action = self.get_argument('action')
+        params = dict(re.findall(PARAMETER_REGEX, self.get_argument('edit-params')))
+
+        container = mpdplayer.Container.get(int(container_id))
+
+        try:
+            if action == 'add':
+                self.add_to_container(container, int(params['dmap.itemid']))
+            else:
+                raise web.HTTPError(501)
+        except KeyError:
+            raise web.HTTPError(404)
+
+    def add_to_container(self, container, item_id):
+        item = mpdplayer.Item.get(item_id)
+        if item:
+            container.add_item(item)
+            self.write(build_node(('medc', [
+                ('mstt', 200),
+                ('mlit', []),
+            ])).serialize())
+        else:
+            raise web.HTTPError(204)
+
+
+class DatabaseEditHandler(DMAPRequestHandler):
+    def get(self, db):
+        action = self.get_argument('action')
+        params = dict(re.findall(PARAMETER_REGEX, self.get_argument('edit-params')))
+
+        try:
+            if action == 'add':
+                self.add_playlist(params['dmap.itemname'])
+            else:
+                raise web.HTTPError(501)
+        except KeyError:
+            raise web.HTTPError(404)
+
+    def add_playlist(self, name):
+        pl = mpd.create_playlist(name)
+
+        self.write(build_node(('medc', [
+            ('mstt', 200),
+            ('miid', pl.id),
+        ])).serialize())
 
 class GroupsHandler(DMAPRequestHandler):
     def get(self, db):
@@ -352,3 +411,11 @@ class PlayPauseHandler(DMAPRequestHandler):
 class PauseHandler(DMAPRequestHandler):
     def get(self):
         mpd.pause()
+
+class NextItemHandler(DMAPRequestHandler):
+    def get(self):
+        mpd.next()
+
+class PrevItemHandler(DMAPRequestHandler):
+    def get(self):
+        mpd.prev()
