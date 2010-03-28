@@ -31,6 +31,7 @@ class EuphonyServer(object):
             (r'/databases/([0-9]+)/groups/([0-9]+)/extra_data/artwork', handlers.GroupArtHandler),
             (r'/databases/([0-9]+)/browse/artists', handlers.BrowseArtistHandler),
             (r'/ctrl-int', handlers.ControlInterfaceHandler),
+            (r'/ctrl-int/1/cue', handlers.CueHandler),
             (r'/ctrl-int/1/getspeakers', handlers.GetSpeakerHandler),
             (r'/ctrl-int/1/getproperty', handlers.GetPropertyHandler),
             (r'/ctrl-int/1/setproperty', handlers.SetPropertyHandler),

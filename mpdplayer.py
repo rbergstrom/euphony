@@ -92,12 +92,13 @@ class CachedIDMixin(object):
             return None
 
     @classmethod
-    def find(cls, **kwargs):
+    def cached(cls, **kwargs):
         itemtype = cls.__name__.lower()
+        extra = kwargs.pop('extra', {})
         try:
             for (k, v) in itemcache[itemtype].iteritems():
                 if v == kwargs:
-                    return cls(id=k, **kwargs)
+                    return cls(id=k, extra=extra, **kwargs)
         except KeyError:
             pass
 
@@ -107,7 +108,7 @@ class CachedIDMixin(object):
         obj_id = 1 + len(itemcache[itemtype])
         itemcache[itemtype][obj_id] = kwargs
 
-        return cls(id=obj_id, **kwargs)
+        return cls(id=obj_id, extra=extra, **kwargs)
 
 class Container(PropertyMixin, CachedIDMixin):
     def __init__(self, id, name, is_base=False, **kwargs):
@@ -117,6 +118,10 @@ class Container(PropertyMixin, CachedIDMixin):
 
         # this MUST be zero for the remote to "see" the playlist
         self.parent_container_id = 0
+
+    @classmethod
+    def root_container(cls):
+        return cls.get(1)
 
     def __str__(self):
         return 'Container: %s' % self.name
@@ -139,7 +144,7 @@ class Container(PropertyMixin, CachedIDMixin):
             items = [i for i in mpd.execute('listallinfo', '')  if 'title' in i]
         else:
             items = [i for i in mpd.execute('listplaylistinfo', self.name) if 'title' in i]
-        return [Item.find(name=i['title'], artist=i['artist'], album=i['album'], uri=i['file']) for i in items]
+        return [Item.cached(uri=i['file'], extra=i) for i in items]
 
     @property_getter('dmap.itemname')
     def get_name(self):
@@ -194,7 +199,7 @@ class Album(PropertyMixin, CachedIDMixin):
     def __init__(self, id, name, artist, **kwargs):
         self.id = id
         self.name = name
-        self.artist = Artist.find(name=artist)
+        self.artist = Artist.cached(name=artist)
 
     def __str__(self):
         return 'Album: %s' % self.name
@@ -214,19 +219,24 @@ class Album(PropertyMixin, CachedIDMixin):
     @property_getter('daap.songalbumartist')
     @property_getter('daap.songartist')
     def get_artist_name(self):
-        return self.artist.name,
+        return self.artist.name
 
     @property_getter('dmap.itemcount')
     def get_item_count(self):
             return len(mpd.execute('list', 'title', 'album', self.name))
 
 class Item(PropertyMixin, CachedIDMixin):
-    def __init__(self, id, name, artist, album, uri, **kwargs):
+    def __init__(self, id, uri, extra, **kwargs):
         self.id = id
-        self.name = name
         self.uri = uri
-        self.artist = Artist.find(name=artist)
-        self.album = Album.find(name=album, artist=artist)
+        self.name = extra['title']
+        self.artist = Artist.cached(name=extra['artist'])
+        self.album = Album.cached(name=extra['album'], artist=extra['artist'])
+        try:
+            self.track = int(str(extra['track']).split('/')[0])
+        except KeyError:
+            self.track = 1
+
         self.item_kind = 2
         self.content_description = ''
         self.has_video = 0
@@ -340,13 +350,19 @@ class MPD(PropertyMixin, MPDMixin):
     def create_playlist(self, name):
         self.execute('save', name)
         self.execute('playlistclear', name)
-        return Container.find(name=name, is_base=False)
+        return Container.cached(name=name, is_base=False)
 
     def delete_playlist(self, name):
         self.execute('rm', name)
 
     def load_playlist(self, name):
         self.execute('load', name)
+
+    def clear_current(self):
+        self.execute('clear')
+
+    def add_to_current(self, uri):
+        self.execute('add', uri)
 
     def toggle_play(self):
         if self.get_player_state() == PLAYER_STATE_PLAYING:
@@ -368,6 +384,14 @@ class MPD(PropertyMixin, MPDMixin):
 
     def next(self):
         self.execute('next')
+
+    @property_setter('dacp.playingtime')
+    def seek(self, value):
+        try:
+            songnum = self.execute('status')['song']
+            self.execute('seek', songnum, int(int(value) / 1000))
+        except KeyError:
+            pass
 
     @property_getter('dacp.nowplaying')
     def get_nowplaying_info(self):
@@ -414,6 +438,28 @@ class MPD(PropertyMixin, MPDMixin):
     def get_available_shuffle_states(self):
         return AVAILABLE_SHUFFLE_STATES
 
+    @property_setter('dacp.repeatstate')
+    def set_repeat_state(self, value):
+        value = int(value)
+        if value == REPEAT_STATE_OFF:
+            self.execute('repeat', 0)
+        else:
+            self.execute('repeat', 1)
+        if value == REPEAT_STATE_SINGLE:
+            self.execute('single', 1)
+        else:
+            self.execute('single', 0)
+        return value
+
+    @property_setter('dacp.shufflestate')
+    def set_shuffle_state(self, value):
+        value = int(value)
+        if value == SHUFFLE_STATE_OFF:
+            self.execute('random', 0)
+        else:
+            self.execute('random', 1)
+        return value
+
     @property_getter('dacp.volumecontrollable')
     def get_volume_controllable(self):
         return VOLUME_CONTROLLABLE
@@ -435,31 +481,31 @@ class MPD(PropertyMixin, MPDMixin):
         try:
             return [1000 * int(x) for x in status['time'].split(':')]
         except TypeError:
-            return (0, 0)
+            return [0, 0]
 
     @property_getter('daap.songalbumid')
     def get_current_album_id(self):
         songinfo = self.execute('currentsong')
-        return Album.find(name=songinfo['title'], artist=songinfo['artist']).id
+        return Album.cached(name=songinfo['title'], artist=songinfo['artist']).id
 
     def get_containers(self):
         playlists = [p['playlist'] for p in self.execute('listplaylists') if 'playlist' in p]
         playlists.sort()
-        root = Container.find(name=BASE_PLAYLIST, is_base=True)
-        return [root] + [Container.find(name=p, is_base=False) for p in playlists if p]
+        root = Container.cached(name=BASE_PLAYLIST, is_base=True)
+        return [root] + [Container.cached(name=p, is_base=False) for p in playlists if p]
 
     def get_artists(self):
         artists = util.sort_by_initial(self.execute('list', 'artist'))
-        return [Artist.find(name=a) for a in artists if a]
+        return [Artist.cached(name=a) for a in artists if a]
 
     def get_albums(self):
         artists = self.get_artists()
         albums = []
         for a in artists:
             albums.extend([
-                Album.find(name=n, artist=a.name) for n in self.execute('list', 'album', 'artist', a.name) if n
+                Album.cached(name=n, artist=a.name) for n in self.execute('list', 'album', 'artist', a.name) if n
             ])
 
-        return util.sort_by_initial(albums, key=lambda x: x.name)
+        return albums
 
 mpd = MPD(str(config.mpd.host), int(config.mpd.port))

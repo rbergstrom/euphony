@@ -1,4 +1,5 @@
 import datetime
+import operator
 import re
 
 from tornado import web
@@ -16,7 +17,7 @@ __all__ = [
     'ContainerItemsHandler', 'GroupsHandler', 'GroupArtHandler', 'BrowseArtistHandler',
     'ControlInterfaceHandler', 'GetSpeakerHandler', 'GetPropertyHandler', 'SetPropertyHandler',
     'PlayStatusUpdateHandler', 'NowPlayingArtHandler', 'PlayPauseHandler', 'PauseHandler'
-    'DatabaseEditHandler', 'ContainerEditHandler', 'PlaySpecHandler',
+    'DatabaseEditHandler', 'ContainerEditHandler', 'PlaySpecHandler', 'CueHandler',
 ]
 
 
@@ -159,6 +160,9 @@ class ContainerItemsHandler(DMAPRequestHandler):
         else:
             items = container.fetch_items()
 
+        items = list(items)
+        items.sort(key=operator.attrgetter('track'))
+
         item_nodes = [('mlit', fetch_properties(properties, i)) for i in items]
 
         node = build_node(('apso', [
@@ -224,11 +228,12 @@ class GroupsHandler(DMAPRequestHandler):
         query_string = self.get_argument('query')
         query_type = self.get_argument('type')
         group_type = self.get_argument('group-type')
-        sort_by = self.get_argument('sort')
+        sort_type = self.get_argument('sort')
         include_headers = bool(int(self.get_argument('include-sort-headers', 0)))
         properties = self.get_argument('meta').split(',')
 
         albums = query.apply_query(query_string, mpd.get_albums())
+        albums = util.sort_by_initial(list(albums), key=operator.attrgetter('name'))
 
         properties.append('dmap.itemcount')
         name_nodes = [('mlit', fetch_properties(properties, a)) for a in albums]
@@ -261,7 +266,7 @@ class GroupArtHandler(DMAPRequestHandler):
         height = int(self.get_argument('mh', 55))
         try:
             album = Album.get(int(group))
-            artwork = albumart.AlbumArt(album.name, album.artist)
+            artwork = albumart.AlbumArt(album.name, album.artist.name)
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
         except Exception:
@@ -272,7 +277,8 @@ class BrowseArtistHandler(DMAPRequestHandler):
         filter_string = self.get_argument('filter')
         include_headers = bool(int(self.get_argument('include-sort-headers', 0)))
 
-        artists = mpd.get_artists()
+        artists = query.apply_query(filter_string, mpd.get_artists())
+        artists = util.sort_by_initial(list(artists), key=operator.attrgetter('name'))
 
         name_nodes = [('mlit', a.name) for a in artists]
 
@@ -320,6 +326,43 @@ class ControlInterfaceHandler(DMAPRequestHandler):
 
         self.write(node.serialize())
 
+class CueHandler(DMAPRequestHandler):
+    def get(self):
+        command = self.get_argument('command')
+
+        if command == 'clear':
+            self.command_clear()
+        elif command == 'play':
+            query_string = self.get_argument('query')
+            index = int(self.get_argument('index'))
+            sort_type = self.get_argument('sort')
+            self.command_play(query_string, index)
+        else:
+            raise web.HTTPError(501)
+
+    def command_clear(self):
+        mpd.clear_current()
+
+        self.write(build_node(('cacr', [
+            ('mstt', 200),
+            ('miid', 0),
+        ])).serialize())
+
+    def command_play(self, query_string, index):
+        container = Container.root_container()
+        items = list(query.apply_query(query_string, container.fetch_items()))
+        items.sort(key=operator.attrgetter('album.name', 'track'))
+
+        for i in items:
+            mpd.add_to_current(i.uri)
+        mpd.play(index)
+
+        self.write(build_node(('cacr', [
+            ('mstt', 200),
+            ('miid', 0),
+        ])).serialize())
+
+
 class GetSpeakerHandler(DMAPRequestHandler):
     def get(self):
         node = build_node(('casp', [
@@ -355,7 +398,9 @@ class SetPropertyHandler(DMAPRequestHandler):
     def get(self):
         for (prop, values) in self.request.arguments.iteritems():
             # Take the last instance of each property, to allow for duplicates
-            mpd.set_property(prop, values[-1])
+            ret = mpd.set_property(prop, values[-1])
+            if ret is None:
+                print "Unknown Property: %s (Value = %s)" % (prop, values)
 
 class PlayStatusUpdateHandler(DMAPRequestHandler):
     @web.asynchronous
@@ -380,14 +425,14 @@ class PlayStatusUpdateHandler(DMAPRequestHandler):
             timeinfo = mpd.get_current_time()
             node_list += [
                 ('canp', mpd.get_property('dacp.nowplaying')),
-                ('cann', songinfo['title']),
-                ('cana', songinfo['artist']),
-                ('canl', songinfo['album']),
-                ('cang', songinfo['genre']),
+                ('cann', songinfo.get('title', '')),
+                ('cana', songinfo.get('artist', '')),
+                ('canl', songinfo.get('album', '')),
+                ('cang', songinfo.get('genre', '')),
                 ('asai', mpd.get_current_album_id),
                 ('cmmk', 1),
                 ('ceGS', 1),
-                ('cant', timeinfo[0]),
+                ('cant', timeinfo[1] - timeinfo[0]),
                 ('cast', timeinfo[1]),
             ]
 
@@ -416,6 +461,7 @@ class PlaySpecHandler(DMAPRequestHandler):
         try:
             container = Container.get(int(container_spec['dmap.persistentid'], 16))
             index = container.get_item_index(int(item_spec['dmap.containeritemid'], 16))
+            mpd.clear_current()
             mpd.load_playlist(container.name)
             if index < 0:
                 raise web.HTTPError(404)

@@ -200,6 +200,7 @@ _TAG_DATA = (
     ('caia', None, 'UByteValue'),
 
     ('medc', None, 'ContainerValue'),
+    ('cacr', None, 'ContainerValue'),
 )
 
 TAGS = dict([(v[0], (v[1], v[2])) for v in _TAG_DATA])
