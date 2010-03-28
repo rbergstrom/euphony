@@ -3,24 +3,29 @@ import re
 
 from tornado import web
 
-from euphony import util, albumart, mpdplayer, query
+from euphony import util, albumart, query
 from euphony.config import current as config
 from euphony.dacp import tags
 from euphony.dacp.values import build_node
 from euphony.dacp.constants import *
 from euphony.db import db
+from euphony.mpdplayer import mpd, Container, Artist, Album, Item
 
 __all__ = [
     'ServerInfoHandler', 'LoginHandler', 'UpdateHandler', 'DatabaseHandler', 'ContainersHandler',
     'ContainerItemsHandler', 'GroupsHandler', 'GroupArtHandler', 'BrowseArtistHandler',
     'ControlInterfaceHandler', 'GetSpeakerHandler', 'GetPropertyHandler', 'SetPropertyHandler',
     'PlayStatusUpdateHandler', 'NowPlayingArtHandler', 'PlayPauseHandler', 'PauseHandler'
-    'DatabaseEditHandler', 'ContainerEditHandler',
+    'DatabaseEditHandler', 'ContainerEditHandler', 'PlaySpecHandler',
 ]
 
-mpd = mpdplayer.mpd
 
-def parse_properties(properties, source):
+def query_to_dict(query):
+    """ Turns a **simple** query (ignores subgroups) into a dict """
+    return dict(re.findall(r"([^\(\),+']+?)[:!]+([^\(\),+']+)", query))
+
+def fetch_properties(properties, source):
+    """ Returns a list of tag-value tuples from the source object """
     result = []
     for p in properties:
         try:
@@ -125,7 +130,7 @@ class ContainersHandler(DMAPRequestHandler):
         containers = mpd.get_containers()
         properties = self.get_argument('meta').split(',')
 
-        container_nodes = [('mlit', parse_properties(properties, c)) for c in containers]
+        container_nodes = [('mlit', fetch_properties(properties, c)) for c in containers]
 
         node = build_node(('aply', [
             ('mstt', 200),
@@ -144,7 +149,7 @@ class ContainerItemsHandler(DMAPRequestHandler):
         query_type = self.get_argument('type', None)
         query_string = self.get_argument('query', None)
 
-        container = mpdplayer.Container.get(int(container_id))
+        container = Container.get(int(container_id))
 
         if container is None:
             raise web.HTTPError(400)
@@ -154,7 +159,7 @@ class ContainerItemsHandler(DMAPRequestHandler):
         else:
             items = container.fetch_items()
 
-        item_nodes = [('mlit', parse_properties(properties, i)) for i in items]
+        item_nodes = [('mlit', fetch_properties(properties, i)) for i in items]
 
         node = build_node(('apso', [
             ('mstt', 200),
@@ -169,9 +174,9 @@ class ContainerItemsHandler(DMAPRequestHandler):
 class ContainerEditHandler(DMAPRequestHandler):
     def get(self, db, container_id):
         action = self.get_argument('action')
-        params = dict(re.findall(PARAMETER_REGEX, self.get_argument('edit-params')))
+        params = query_to_dict(self.get_argument('edit-params'))
 
-        container = mpdplayer.Container.get(int(container_id))
+        container = Container.get(int(container_id))
 
         try:
             if action == 'add':
@@ -182,7 +187,7 @@ class ContainerEditHandler(DMAPRequestHandler):
             raise web.HTTPError(404)
 
     def add_to_container(self, container, item_id):
-        item = mpdplayer.Item.get(item_id)
+        item = Item.get(item_id)
         if item:
             container.add_item(item)
             self.write(build_node(('medc', [
@@ -196,7 +201,7 @@ class ContainerEditHandler(DMAPRequestHandler):
 class DatabaseEditHandler(DMAPRequestHandler):
     def get(self, db):
         action = self.get_argument('action')
-        params = dict(re.findall(PARAMETER_REGEX, self.get_argument('edit-params')))
+        params = query_to_dict(self.get_argument('edit-params'))
 
         try:
             if action == 'add':
@@ -226,7 +231,7 @@ class GroupsHandler(DMAPRequestHandler):
         albums = query.apply_query(query_string, mpd.get_albums())
 
         properties.append('dmap.itemcount')
-        name_nodes = [('mlit', parse_properties(properties, a)) for a in albums]
+        name_nodes = [('mlit', fetch_properties(properties, a)) for a in albums]
 
         node_list = [
             ('mstt', 200),
@@ -255,7 +260,7 @@ class GroupArtHandler(DMAPRequestHandler):
         width = int(self.get_argument('mw', 55))
         height = int(self.get_argument('mh', 55))
         try:
-            album = mpdplayer.Album.get(int(group))
+            album = Album.get(int(group))
             artwork = albumart.AlbumArt(album.name, album.artist)
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
@@ -341,17 +346,16 @@ class GetPropertyHandler(DMAPRequestHandler):
         if 'dacp.playingtime' in properties:
             properties.remove('dacp.playingtime')
 
-        node_list += parse_properties(properties, mpd)
+        node_list += fetch_properties(properties, mpd)
         node = build_node(('cmgt', node_list))
 
         self.write(node.serialize())
 
 class SetPropertyHandler(DMAPRequestHandler):
     def get(self):
-        for key in mpd.settable_properties:
-            value = self.get_argument(key, None)
-            if value is not None:
-                mpd.set_property(key, value)
+        for (prop, values) in self.request.arguments.iteritems():
+            # Take the last instance of each property, to allow for duplicates
+            mpd.set_property(prop, values[-1])
 
 class PlayStatusUpdateHandler(DMAPRequestHandler):
     @web.asynchronous
@@ -402,6 +406,21 @@ class NowPlayingArtHandler(DMAPRequestHandler):
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
         except albumart.ArtNotFoundError:
+            raise web.HTTPError(404)
+
+class PlaySpecHandler(DMAPRequestHandler):
+    def get(self):
+        database_spec = query_to_dict(self.get_argument('database-spec'))
+        container_spec = query_to_dict(self.get_argument('container-spec'))
+        item_spec = query_to_dict(self.get_argument('container-item-spec'))
+        try:
+            container = Container.get(int(container_spec['dmap.persistentid'], 16))
+            index = container.get_item_index(int(item_spec['dmap.containeritemid'], 16))
+            mpd.load_playlist(container.name)
+            if index < 0:
+                raise web.HTTPError(404)
+            mpd.play(1 + index)
+        except KeyError:
             raise web.HTTPError(404)
 
 class PlayPauseHandler(DMAPRequestHandler):

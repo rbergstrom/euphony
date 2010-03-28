@@ -36,6 +36,7 @@ class EuphonyServer(object):
             (r'/ctrl-int/1/setproperty', handlers.SetPropertyHandler),
             (r'/ctrl-int/1/playstatusupdate', handlers.PlayStatusUpdateHandler),
             (r'/ctrl-int/1/nowplayingartwork', handlers.NowPlayingArtHandler),
+            (r'/ctrl-int/1/playspec', handlers.PlaySpecHandler),
             (r'/ctrl-int/1/playpause', handlers.PlayPauseHandler),
             (r'/ctrl-int/1/pause', handlers.PauseHandler),
             (r'/ctrl-int/1/nextitem', handlers.NextItemHandler),
