@@ -288,7 +288,7 @@ class GroupArtHandler(DMAPRequestHandler):
         height = int(self.get_argument('mh', 55))
         try:
             album = Album.get(int(group))
-            artwork = albumart.AlbumArt(album.name, album.artist.name)
+            artwork = albumart.AlbumArt(album.artist.name, album.name)
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
         except Exception:
@@ -469,7 +469,7 @@ class NowPlayingArtHandler(DMAPRequestHandler):
         height = int(self.get_argument('mh', 320))
         try:
             songinfo = mpd.get_current_track()
-            artwork = albumart.AlbumArt(songinfo['album'], songinfo['artist'])
+            artwork = albumart.AlbumArt(songinfo['artist'], songinfo['album'])
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
         except albumart.ArtNotFoundError:

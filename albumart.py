@@ -22,8 +22,10 @@
 
 import base64
 import Image
+import logging
 import lxml.etree
 import StringIO
+import re
 import urllib
 import urllib2
 
@@ -31,27 +33,91 @@ from euphony import util
 from euphony.db import db
 from euphony.dacp.constants import *
 
+ALBUMART_ROOT = 'http://www.albumart.org/index.php'
+
 LASTFM_KEY = '7a2babf6de98a321d3da7a8e46265f76'
 LASTFM_ROOT = 'http://ws.audioscrobbler.com/2.0'
 
 IMAGE_SIZES = ('extralarge', 'large', 'medium', 'small')
 
+HEADERS = {
+    'User-Agent': DAAP_SERVER,
+}
+
+not_found = set()
+
 class ArtNotFoundError(Exception):
     pass
 
-class AlbumArt(object):
-    def __init__(self, album, artist):
-        self.album = album
-        self.artist = artist
+def get_albumart_url(artist, album):
+    url = '%s?%s' % (ALBUMART_ROOT, urllib.urlencode({
+        'itempage': 1,
+        'newsearch': 1,
+        'searchindex': 'Music',
+        'srchkey': '%s %s' % (artist, album),
+    }))
+    logging.warning('ALBUMART.ORG: %s' % url)
+    req = urllib2.Request(url, headers=HEADERS)
+    try:
+        data = urllib2.urlopen(req).read()
+        images = re.findall(r'title="(.+?)".*src=.*href="(.+?)".*zoom-icon\.jpg', data)
+        for (title, url) in images:
+            if util.clean_name(title) == util.clean_name(album):
+                return url
+        # If there's no exact match
+        try:
+            return images[0][1]
+        except IndexError:
+            pass
+    except urllib2.URLError:
+        pass
 
-        self._headers = {
-            'User-Agent': DAAP_SERVER,
-        }
+    return None
+
+def get_lastfm_url(artist, album):
+    url = '%s/?%s' % (
+        LASTFM_ROOT, urllib.urlencode({
+            'method': 'album.getinfo',
+            'api_key': LASTFM_KEY,
+            'artist': artist,
+            'album': album,
+        }))
+    logging.warning('LAST.FM: %s' % url)
+    req = urllib2.Request(url, headers=HEADERS)
+
+    try:
+        xml = lxml.etree.parse(urllib2.urlopen(req))
+        for size in IMAGE_SIZES:
+            try:
+                return xml.xpath('//image[@size="%s"]/text()' % size)[0]
+            except IndexError:
+                pass
+    except urllib2.URLError:
+        pass
+
+    return None
+
+class AlbumArt(object):
+    def __init__(self, artist, album):
+        self.artist = artist
+        self.album = album
 
     def get_png(self, width=320, height=320):
         output = StringIO.StringIO()
-        img = self._fetch_image().resize((width, height), Image.ANTIALIAS)
-        img.save(output, 'PNG')
+        try:
+            buf = StringIO.StringIO(self._get_cached_artwork())
+            img = Image.open(buf).convert('RGB')
+        except ArtNotFoundError:
+            key = '%s %s' % (self.artist, self.album)
+            try:
+                if key not in not_found:
+                    img = self._download_image(min(width, height)).convert('RGB')
+                else:
+                    raise
+            except ArtNotFoundError:
+                not_found.add(key)
+                raise
+        img.resize((width, height), Image.ANTIALIAS).save(output, 'PNG')
         return output.getvalue()
 
     def _get_cached_artwork(self):
@@ -72,36 +138,29 @@ class AlbumArt(object):
         }
         db.albumart.insert(record)
 
-    def _get_artwork_url(self):
-        url = '%s/?method=album.getinfo&api_key=%s&artist=%s&album=%s' % (
-            LASTFM_ROOT, LASTFM_KEY, urllib.quote_plus(self.artist), urllib.quote_plus(self.album))
-        req = urllib2.Request(url, headers=self._headers)
 
-        try:
-            xml = lxml.etree.parse(urllib2.urlopen(req))
-            for size in IMAGE_SIZES:
+    def _download_image(self, min_size):
+        best = None
+        for func in (get_lastfm_url, get_albumart_url):
+            url = func(self.artist, self.album)
+            if url is not None:
                 try:
-                    return xml.xpath('//image[@size="%s"]/text()' % size)[0]
-                except IndexError:
+                    img_data = urllib2.urlopen(url).read()
+                    self._cache_artwork(img_data)
+                    img = Image.open(StringIO.StringIO(img_data))
+
+                    if img.size >= (min_size, min_size):
+                        return img
+
+                    if (best is None) or (img.size > best.size):
+                        best = img
+
+                except urllib2.URLError:
                     pass
-        except IOError:
-            pass
 
-        raise ArtNotFoundError(self.album, self.artist)
-
-    def _fetch_image(self):
-        try:
-            buf = StringIO.StringIO(self._get_cached_artwork())
-            return Image.open(buf).convert('RGB')
-        except ArtNotFoundError:
-            req = urllib2.Request(self._get_artwork_url(), headers=self._headers)
-            try:
-                image_data = urllib2.urlopen(req).read()
-                self._cache_artwork(image_data)
-                buf = StringIO.StringIO(image_data)
-                return Image.open(buf).convert('RGB')
-            except urllib2.URLError:
-                raise ArtNotFoundError(self.album, self.artist)
-
+        if best is not None:
+            return best
+        else:
+            raise ArtNotFoundError(self.artist, self.album)
 
 
