@@ -20,14 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import struct
+import numpy as np
 import os.path
 import socket
+import struct
 import urllib2
-import numpy as np
 
-from euphony.db import db
-from euphony.dacp.values import NodeValue
+import dacp
+import db
 
 __all__  = ['generate_code', 'TouchRemote', 'TouchRemoteListener']
 
@@ -43,12 +43,9 @@ class TouchRemote(object):
         resp = urllib2.urlopen('http://%s:%d/pair?pairingcode=%s&servicename=%s' % (
             self.address, self.port, hashcode, servicename
         ))
-        node = NodeValue.deserialize(resp.read())
+        node = dacp.NodeValue.deserialize(resp.read())
 
-        record = {'guid': node.cmpg[0]}
-
-        if db.pairing.find_one(record) is None:
-            db.pairing.insert(record)
+        db.PairingRecord.add(guid=node.cmpg[0])
 
         return node
 

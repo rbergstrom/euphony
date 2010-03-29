@@ -24,13 +24,19 @@ import struct
 import time
 
 from datetime import datetime
-from euphony.dacp import tags
+
+import tags
 
 __all__ = [
-    'UByteValue', 'ByteValue', 'UShortValue', 'ShortValue', 'UIntValue', 'IntValue',
-    'ULongValue', 'LongValue', 'DatetimeValue', 'VersionValue', 'StringValue',
-    'BinaryValue', 'MultiIntValue', 'MultiUIntValue', 'ContainerValue', 'NodeValue',
-    'UnknownTagError', 'InvalidValueError', 'build_node'
+    'UByteValue', 'ByteValue','UShortValue', 'ShortValue',
+    'UIntValue', 'IntValue', 'ULongValue', 'LongValue',
+    'BinaryValue', 'ContainerValue', 'DatetimeValue',
+    'MultiIntValue', 'MultiUIntValue', 'NodeValue',
+    'StringValue', 'VersionValue',
+
+    'UnknownTagError', 'InvalidValueError',
+
+    'build_node'
 ]
 
 class UnknownTagError(ValueError):

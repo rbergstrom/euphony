@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # The MIT License
 #
 # Copyright (c) 2010 Ryan Bergstrom
@@ -20,18 +22,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import logging
 import os.path
 import random
-import sys
 import socket
 import tornado.web
 
-sys.path = [os.path.abspath('..')] + sys.path
+from tornado.httpserver import HTTPServer
+from tornado.ioloop import IOLoop
 
-from euphony import zeroconf, pairing, handlers
-from euphony.dacp import values, tags, constants
-from euphony.db import db
-from euphony.config import current as config
+import dacp
+import handlers
+import pairing
+import zeroconf
+
+from config import current as config
 
 class EuphonyServer(object):
 
@@ -71,8 +76,8 @@ class EuphonyServer(object):
 
         localip = socket.gethostbyname(socket.gethostname())
         self.player_service = zeroconf.ServiceInfo(
-            type=constants.MDNS_TYPE_SERVER,
-            name='%s.%s' % (config.server.id, constants.MDNS_TYPE_SERVER),
+            type=dacp.MDNS_TYPE_SERVER,
+            name='%s.%s' % (config.server.id, dacp.MDNS_TYPE_SERVER),
             server=socket.getfqdn(localip),
             address=socket.inet_aton(localip),
             port=3689,
@@ -87,30 +92,51 @@ class EuphonyServer(object):
             }
         )
 
-        self.mdns.addServiceListener(constants.MDNS_TYPE_REMOTE, self.remote_listener)
+        self.mdns.addServiceListener(dacp.MDNS_TYPE_REMOTE, self.remote_listener)
         self.mdns.registerService(self.player_service)
 
     def stop_zeroconf(self):
         self.mdns.close()
 
 
-if __name__ == '__main__':
-    from tornado.httpserver import HTTPServer
-    from tornado.ioloop import IOLoop
-    import logging
+app = None
 
-    #logging.basicConfig(level=logging.INFO)
-
+def start_app():
+    global app
     app = EuphonyServer()
+    http_server = HTTPServer(app.wsgi_app)
+    http_server.listen(int(config.server.port), str(config.server.host))
+
+    app.start_zeroconf()
+    IOLoop.instance().start()
+
+def stop_app():
+    global app
+    app.stop_zeroconf()
+    IOLoop.instance().stop()
+
+if __name__ == '__main__':
+    import sys
+
+    from optparse import OptionParser
+
+    parser = OptionParser()
+    parser.add_option('-v', '--verbose',
+                      action='store_true',
+                      dest='verbose',
+                      help='Spam the log with lots of information',
+                      default=False)
+
+    (options, args) = parser.parse_args(sys.argv)
+
+    if options.verbose:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.WARNING)
+
     try:
-        http_server = HTTPServer(app.wsgi_app)
-        http_server.listen(int(config.server.port), str(config.server.host))
-
-        app.start_zeroconf()
-        print 'Advertising Zeroconf Service...'
-
-        print 'Listening on %s:%d...' % (str(config.server.host), int(config.server.port))
-        IOLoop.instance().start()
+        print('Listening on %s:%d...' % (str(config.server.host), int(config.server.port)))
+        start_app()
     except KeyboardInterrupt:
-        print 'Shutting down...'
-        app.stop_zeroconf()
+        print('Shutting down...')
+        stop_app()

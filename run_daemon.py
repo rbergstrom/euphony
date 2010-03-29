@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # The MIT License
 #
 # Copyright (c) 2010 Ryan Bergstrom
@@ -20,48 +22,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from pymongo import Connection
+import daemon
+import signal
 
 from config import current as config
+from euphony import start_app, stop_app
 
-__all__ = ['db']
+context = daemon.DaemonContext()
+context.signal_map = {
+	signal.SIGTERM: stop_app,
+	signal.SIGHUP: stop_app,
+}
 
-conn = Connection(config.db.host, int(config.db.port))
-db = conn[config.db.name]
-
-def record_to_kwargs(record):
-    return dict([(str(k), v) for k, v in record.iteritems() if not k.startswith('_')])
-
-class BasicRecord(object):
-    collection = None
-
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-    def insert(self):
-        global db
-        db[cls.collection].insert(self.__dict__)
-
-    @classmethod
-    def find(cls, **kwargs):
-        global db
-        record = db[cls.collection].find_one(kwargs)
-        if record is not None:
-            return cls(**record_to_kwargs(record))
-        else:
-            return None
-
-    @classmethod
-    def add(cls, **kwargs):
-        record = cls.find(**kwargs)
-        if record is None:
-            record = cls(**kwargs)
-            record.insert()
-        return record
-
-
-class PairingRecord(BasicRecord):
-    collection = 'pairing'
-
-class AlbumArtRecord(BasicRecord):
-    collection = 'albumart'
+with context:
+    start_app()

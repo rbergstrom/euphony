@@ -20,10 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import random
-import string
 import datetime
+import random
 import re
+import string
 
 __all__ = ['generate_sessionid', 'build_sort_headers', 'sort_by_initial']
 

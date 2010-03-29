@@ -24,14 +24,14 @@ import base64
 import Image
 import logging
 import lxml.etree
-import StringIO
 import re
+import StringIO
 import urllib
 import urllib2
 
-from euphony import util
-from euphony.db import db
-from euphony.dacp.constants import *
+import dacp
+import db
+import util
 
 ALBUMART_ROOT = 'http://www.albumart.org/index.php'
 
@@ -41,7 +41,7 @@ LASTFM_ROOT = 'http://ws.audioscrobbler.com/2.0'
 IMAGE_SIZES = ('extralarge', 'large', 'medium', 'small')
 
 HEADERS = {
-    'User-Agent': DAAP_SERVER,
+    'User-Agent': dacp.DAAP_SERVER,
 }
 
 not_found = set()
@@ -56,7 +56,7 @@ def get_albumart_url(artist, album):
         'searchindex': 'Music',
         'srchkey': '%s %s' % (artist, album),
     }))
-    logging.warning('ALBUMART.ORG: %s' % url)
+    logging.info('Fetching from albumart.org: %s' % url)
     req = urllib2.Request(url, headers=HEADERS)
     try:
         data = urllib2.urlopen(req).read()
@@ -82,7 +82,7 @@ def get_lastfm_url(artist, album):
             'artist': artist,
             'album': album,
         }))
-    logging.warning('LAST.FM: %s' % url)
+    logging.info('Fetching from last.fm: %s' % url)
     req = urllib2.Request(url, headers=HEADERS)
 
     try:
@@ -121,22 +121,17 @@ class AlbumArt(object):
         return output.getvalue()
 
     def _get_cached_artwork(self):
-        try:
-            record = db.albumart.find_one({
-                'artist': util.clean_name(self.artist),
-                'album': util.clean_name(self.album),
-            })
-            return base64.b64decode(record['data'])
-        except TypeError:
+        record = db.AlbumArtRecord.find(artist=util.clean_name(self.artist),
+                                        album=util.clean_name(self.album))
+        if record is not None:
+            return base64.b64decode(record.data)
+        else:
             raise ArtNotFoundError(self.album, self.artist)
 
     def _cache_artwork(self, image_data):
-        record = {
-            'artist': util.clean_name(self.artist),
-            'album': util.clean_name(self.album),
-            'data': base64.b64encode(image_data),
-        }
-        db.albumart.insert(record)
+        db.AlbumArtRecord.add(artist=util.clean_name(self.artist),
+                              album=util.clean_name(self.album),
+                              data=base64.b64encode(image_data))
 
 
     def _download_image(self, min_size):
