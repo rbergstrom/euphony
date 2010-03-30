@@ -23,7 +23,7 @@
 import base64
 import Image
 import logging
-import lxml.etree
+import xml.dom.minidom
 import re
 import StringIO
 import urllib
@@ -86,13 +86,15 @@ def get_lastfm_url(artist, album):
     req = urllib2.Request(url, headers=HEADERS)
 
     try:
-        xml = lxml.etree.parse(urllib2.urlopen(req))
+        doc = xml.dom.minidom.parse(urllib2.urlopen(req))
+        nodes = doc.getElementsByTagName('image')
+        images = dict([(n.getAttribute('size'), n.childNodes[0].nodeValue) for n in nodes])
         for size in IMAGE_SIZES:
             try:
-                return xml.xpath('//image[@size="%s"]/text()' % size)[0]
-            except IndexError:
+                return images[size]
+            except KeyError:
                 pass
-    except urllib2.URLError:
+    except Exception:
         pass
 
     return None
