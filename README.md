@@ -9,8 +9,10 @@ amount of maintenance or set-up work involved.
 Installation and Dependencies
 -----------------------------
 
-Simply run euphony.py to run the server in a terminal, or run_daemon.py to
-start a daemon process.
+Simply run main.py to run the server in a terminal, or run_daemon.py to
+start a daemon process. To pair a remote with the server, navgiate to
+http://server:port/web/pairing (the default port is 3689), and use the
+web interface provided.
 
 Euphony currently has several dependencies:
 

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # The MIT License
 #
 # Copyright (c) 2010 Ryan Bergstrom
@@ -39,13 +37,14 @@ import zeroconf
 from config import current as config
 
 class EuphonyServer(object):
-
     def __init__(self):
         self.mdns = None
         self.remote_listener = pairing.TouchRemoteListener()
         self.player_service = None
 
         self.wsgi_app = tornado.web.Application([
+            (r'/web/pairing/?', handlers.WebPairingHandler),
+            (r'/web/pairing/remotes', handlers.WebListRemotesHandler),
             (r'/server-info', handlers.ServerInfoHandler),
             (r'/login', handlers.LoginHandler),
             (r'/update', handlers.UpdateHandler),
@@ -70,6 +69,12 @@ class EuphonyServer(object):
             (r'/ctrl-int/1/nextitem', handlers.NextItemHandler),
             (r'/ctrl-int/1/previtem', handlers.PrevItemHandler),
         ])
+
+    @classmethod
+    def instance(cls):
+        if not hasattr(cls, '_instance'):
+            cls._instance = cls()
+        return cls._instance
 
     def start_zeroconf(self):
         self.mdns = zeroconf.Zeroconf()
@@ -98,13 +103,8 @@ class EuphonyServer(object):
     def stop_zeroconf(self):
         self.mdns.close()
 
-
-app = None
-
 def start_app(argv):
     from optparse import OptionParser
-
-    global app
 
     parser = OptionParser()
     parser.add_option('-v', '--verbose',
@@ -121,7 +121,7 @@ def start_app(argv):
     else:
         logging.basicConfig(filename=config.logging.filename, level=logging.WARNING)
 
-    app = EuphonyServer()
+    app = EuphonyServer.instance()
     http_server = HTTPServer(app.wsgi_app)
     http_server.listen(int(config.server.port), str(config.server.host))
 
@@ -130,16 +130,6 @@ def start_app(argv):
     IOLoop.instance().start()
 
 def stop_app():
-    global app
-    app.stop_zeroconf()
+    EuphonyServer.instance().stop_zeroconf()
     IOLoop.instance().stop()
     logging.info('Server stopped.')
-
-if __name__ == '__main__':
-    import sys
-    try:
-        print('Listening on %s:%d...' % (str(config.server.host), int(config.server.port)))
-        start_app(sys.argv)
-    except KeyboardInterrupt:
-        print('Shutting down...')
-        stop_app()

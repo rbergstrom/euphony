@@ -26,7 +26,7 @@ from ConfigParser import SafeConfigParser
 
 __all__ = ['current', 'ConfigSet']
 
-class Section:
+class Section(object):
     def __init__(self, cfg, section):
         self._items = dict(cfg.items(section))
 
@@ -39,7 +39,7 @@ class Section:
         except KeyError:
             raise AttributeError('Invalid key: %r' % name)
 
-class ConfigSet:
+class ConfigSet(object):
     def __init__(self, inifile):
         cfg = SafeConfigParser()
         cfg.read(inifile)

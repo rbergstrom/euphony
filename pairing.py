@@ -52,10 +52,10 @@ class TouchRemote(object):
 
             logging.info('Pairing successful with GUID %016X' % node.cmpg[0])
             db.PairingRecord.add(guid=node.cmpg[0])
+            return node
         except Exception, e:
             logging.warning('Pairing failed: %s' % e)
-
-        return node
+            raise
 
     def __unicode__(self):
         return '%(name)s @ %(address)s:%(port)d' % self.__dict__
@@ -67,6 +67,7 @@ class TouchRemoteListener(object):
 
     def removeService(self, mdns, type, name):
         try:
+            logging.info('Remote lost: %s' % unicode(self.remotes[name]))
             del self.remotes[name]
         except KeyError:
             pass
@@ -80,7 +81,7 @@ class TouchRemoteListener(object):
             info.getPort(),
             props['Pair'],
         )
-        logging.info('New remote found: %s' % self.remotes[name])
+        logging.info('New remote found: %s' % unicode(self.remotes[name]))
 
 class uint32(object):
     def __init__(self, value, base=10):

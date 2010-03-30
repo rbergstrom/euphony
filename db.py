@@ -40,7 +40,7 @@ class BasicRecord(object):
 
     def insert(self):
         global db
-        db[cls.collection].insert(self.__dict__)
+        db[self.collection].insert(self.__dict__)
 
     @classmethod
     def find(cls, **kwargs):

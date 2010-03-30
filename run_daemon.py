@@ -24,6 +24,7 @@
 
 import daemon
 import signal
+import sys
 
 from config import current as config
 from euphony import start_app, stop_app
@@ -35,4 +36,4 @@ context.signal_map = {
 }
 
 with context:
-    start_app()
+    start_app(sys.argv)
