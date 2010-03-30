@@ -17,8 +17,6 @@ Euphony currently has several dependencies:
 * [Tornado][tornado] - Provides the web framework and HTTP server.
 * [MongoDB][mongodb] and [PyMongo][pymongo] - Stores pairing codes and cover art.
 * [Python Imaging Library][pil] - For resizing and converting album art.
-* [Numpy][numpy] - Needed to generate the pairing code currently (on the list to remove).
-* [lxml][lxml] - Parsing XML to fetch album art (on the list to fix - replace it with xml.etree).
 * [python-daemon][pydaemon] - Used to daemonize the process. Only needed for run_daemon.py.
 
 Everything else is either included (Zeroconf and MPDClient), or in the standard
