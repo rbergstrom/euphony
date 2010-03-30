@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import logging
 import os.path
 import socket
 import struct
@@ -39,12 +40,20 @@ class TouchRemote(object):
 
     def pair(self, passcode, servicename):
         hashcode = generate_code(passcode, self.pairid)
-        resp = urllib2.urlopen('http://%s:%d/pair?pairingcode=%s&servicename=%s' % (
-            self.address, self.port, hashcode, servicename
+        logging.info('Attempting to pair with %s:%d with code %s' % (
+            self.address, self.port, hashcode
         ))
-        node = dacp.NodeValue.deserialize(resp.read())
 
-        db.PairingRecord.add(guid=node.cmpg[0])
+        try:
+            resp = urllib2.urlopen('http://%s:%d/pair?pairingcode=%s&servicename=%s' % (
+                self.address, self.port, hashcode, servicename
+            ))
+            node = dacp.NodeValue.deserialize(resp.read())
+
+            logging.info('Pairing successful with GUID %016X' % node.cmpg[0])
+            db.PairingRecord.add(guid=node.cmpg[0])
+        except Exception, e:
+            logging.warning('Pairing failed: %s' % e)
 
         return node
 
@@ -71,6 +80,7 @@ class TouchRemoteListener(object):
             info.getPort(),
             props['Pair'],
         )
+        logging.info('New remote found: %s' % self.remotes[name])
 
 class uint32(object):
     def __init__(self, value, base=10):

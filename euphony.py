@@ -101,24 +101,10 @@ class EuphonyServer(object):
 
 app = None
 
-def start_app():
-    global app
-    app = EuphonyServer()
-    http_server = HTTPServer(app.wsgi_app)
-    http_server.listen(int(config.server.port), str(config.server.host))
-
-    app.start_zeroconf()
-    IOLoop.instance().start()
-
-def stop_app():
-    global app
-    app.stop_zeroconf()
-    IOLoop.instance().stop()
-
-if __name__ == '__main__':
-    import sys
-
+def start_app(argv):
     from optparse import OptionParser
+
+    global app
 
     parser = OptionParser()
     parser.add_option('-v', '--verbose',
@@ -127,16 +113,33 @@ if __name__ == '__main__':
                       help='Spam the log with lots of information',
                       default=False)
 
-    (options, args) = parser.parse_args(sys.argv)
+
+    (options, args) = parser.parse_args(argv)
 
     if options.verbose:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(filename=config.logging.filename, level=logging.INFO)
     else:
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(filename=config.logging.filename, level=logging.WARNING)
 
+    app = EuphonyServer()
+    http_server = HTTPServer(app.wsgi_app)
+    http_server.listen(int(config.server.port), str(config.server.host))
+
+    app.start_zeroconf()
+    logging.info('Server starting on %s:%d...' % (str(config.server.host), int(config.server.port)))
+    IOLoop.instance().start()
+
+def stop_app():
+    global app
+    app.stop_zeroconf()
+    IOLoop.instance().stop()
+    logging.info('Server stopped.')
+
+if __name__ == '__main__':
+    import sys
     try:
         print('Listening on %s:%d...' % (str(config.server.host), int(config.server.port)))
-        start_app()
+        start_app(sys.argv)
     except KeyboardInterrupt:
         print('Shutting down...')
         stop_app()

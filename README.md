@@ -26,8 +26,6 @@ Python library.
   [mongodb]: http://www.mongodb.org/
   [pymongo]: http://pypi.python.org/pypi/pymongo/
   [pil]: http://www.pythonware.com/products/pil/
-  [numpy]: http://numpy.scipy.org/
-  [lxml]: http://codespeak.net/lxml/
   [pydaemon]: http://pypi.python.org/pypi/python-daemon/
 
 Thanks and Credits
