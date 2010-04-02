@@ -24,14 +24,14 @@ import logging
 import os.path
 import random
 import socket
-import tornado.web
 
 from tornado.httpserver import HTTPServer
 from tornado.ioloop import IOLoop
+from tornado.web import Application
 
-import dacp
+import constants
+import dacpy
 import handlers
-import pairing
 import zeroconf
 
 from config import current as config
@@ -39,10 +39,10 @@ from config import current as config
 class EuphonyServer(object):
     def __init__(self):
         self.mdns = None
-        self.remote_listener = pairing.TouchRemoteListener()
+        self.remote_listener = dacpy.pairing.TouchRemoteListener()
         self.player_service = None
 
-        self.wsgi_app = tornado.web.Application([
+        self.wsgi_app = Application([
             (r'/web/pairing/?', handlers.WebPairingHandler),
             (r'/web/pairing/remotes', handlers.WebListRemotesHandler),
             (r'/server-info', handlers.ServerInfoHandler),
@@ -81,8 +81,8 @@ class EuphonyServer(object):
 
         localip = socket.gethostbyname(socket.gethostname())
         self.player_service = zeroconf.ServiceInfo(
-            type=dacp.MDNS_TYPE_SERVER,
-            name='%s.%s' % (config.server.id, dacp.MDNS_TYPE_SERVER),
+            type=constants.MDNS_TYPE_SERVER,
+            name='%s.%s' % (config.server.id, constants.MDNS_TYPE_SERVER),
             server=socket.getfqdn(localip),
             address=socket.inet_aton(localip),
             port=3689,
@@ -97,7 +97,7 @@ class EuphonyServer(object):
             }
         )
 
-        self.mdns.addServiceListener(dacp.MDNS_TYPE_REMOTE, self.remote_listener)
+        self.mdns.addServiceListener(constants.MDNS_TYPE_REMOTE, self.remote_listener)
         self.mdns.registerService(self.player_service)
 
     def stop_zeroconf(self):
@@ -112,19 +112,28 @@ def start_app(argv):
                       dest='verbose',
                       help='Spam the log with lots of information',
                       default=False)
+    parser.add_option('-s', '--stdout',
+                      action='store_true',
+                      dest='stdout',
+                      help='Log to stdout instead of a file',
+                      default=False)
 
 
     (options, args) = parser.parse_args(argv)
 
     if options.verbose:
-        logging.basicConfig(filename=config.logging.filename, level=logging.INFO)
+        loglevel = logging.INFO
     else:
-        logging.basicConfig(filename=config.logging.filename, level=logging.WARNING)
+        loglevel = logging.WARNING
+
+    if options.stdout:
+        logging.basicConfig(level=loglevel)
+    else:
+        logging.basicConfig(filename=config.logging.filename, level=loglevel)
 
     app = EuphonyServer.instance()
     http_server = HTTPServer(app.wsgi_app)
     http_server.listen(int(config.server.port), str(config.server.host))
-
     app.start_zeroconf()
     logging.info('Server starting on %s:%d...' % (str(config.server.host), int(config.server.port)))
     IOLoop.instance().start()

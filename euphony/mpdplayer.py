@@ -24,7 +24,7 @@ import collections
 import socket
 import threading
 
-import dacp
+import constants
 import mpdclient
 import util
 
@@ -389,7 +389,7 @@ class MPD(PropertyMixin, MPDMixin):
         self.execute('add', uri)
 
     def toggle_play(self):
-        if self.get_player_state() == dacp.PLAYER_STATE_PLAYING:
+        if self.get_player_state() == constants.PLAYER_STATE_PLAYING:
             self.pause()
         else:
             self.play()
@@ -429,9 +429,9 @@ class MPD(PropertyMixin, MPDMixin):
         status = self.execute('status')
         try:
             return {
-                'stop': dacp.PLAYER_STATE_STOPPED,
-                'pause': dacp.PLAYER_STATE_PAUSED,
-                'play': dacp.PLAYER_STATE_PLAYING,
+                'stop': constants.PLAYER_STATE_STOPPED,
+                'pause': constants.PLAYER_STATE_PAUSED,
+                'play': constants.PLAYER_STATE_PLAYING,
             }[status['state']]
         except KeyError:
             return PLAYER_STATE_STOPPED
@@ -440,36 +440,36 @@ class MPD(PropertyMixin, MPDMixin):
     def get_repeat_state(self):
         status = self.execute('status')
         if status['single'] == '1':
-            return dacp.REPEAT_STATE_SINGLE
+            return constants.REPEAT_STATE_SINGLE
         elif status['repeat'] == '1':
-            return dacp.REPEAT_STATE_ON
+            return constants.REPEAT_STATE_ON
         else:
-            return dacp.REPEAT_STATE_OFF
+            return constants.REPEAT_STATE_OFF
 
     @property_getter('dacp.availablerepeatstates')
     def get_available_repeat_states(self):
-        return dacp.AVAILABLE_REPEAT_STATES
+        return constants.AVAILABLE_REPEAT_STATES
 
     @property_getter('dacp.shufflestate')
     def get_shuffle_state(self):
         status = self.execute('status')
         if status['random'] == '1':
-            return dacp.SHUFFLE_STATE_ON
+            return constants.SHUFFLE_STATE_ON
         else:
-            return dacp.SHUFFLE_STATE_OFF
+            return constants.SHUFFLE_STATE_OFF
 
     @property_getter('dacp.availableshufflestates')
     def get_available_shuffle_states(self):
-        return dacp.AVAILABLE_SHUFFLE_STATES
+        return constants.AVAILABLE_SHUFFLE_STATES
 
     @property_setter('dacp.repeatstate')
     def set_repeat_state(self, value):
         value = int(value)
-        if value == dacp.REPEAT_STATE_OFF:
+        if value == constants.REPEAT_STATE_OFF:
             self.execute('repeat', 0)
         else:
             self.execute('repeat', 1)
-        if value == dacp.REPEAT_STATE_SINGLE:
+        if value == constants.REPEAT_STATE_SINGLE:
             self.execute('single', 1)
         else:
             self.execute('single', 0)
@@ -478,7 +478,7 @@ class MPD(PropertyMixin, MPDMixin):
     @property_setter('dacp.shufflestate')
     def set_shuffle_state(self, value):
         value = int(value)
-        if value == dacp.SHUFFLE_STATE_OFF:
+        if value == constants.SHUFFLE_STATE_OFF:
             self.execute('random', 0)
         else:
             self.execute('random', 1)
@@ -486,7 +486,7 @@ class MPD(PropertyMixin, MPDMixin):
 
     @property_getter('dacp.volumecontrollable')
     def get_volume_controllable(self):
-        return dacp.VOLUME_CONTROLLABLE
+        return constants.VOLUME_CONTROLLABLE
 
     @property_getter('dmcp.volume')
     def get_volume(self):
@@ -515,7 +515,7 @@ class MPD(PropertyMixin, MPDMixin):
     def get_containers(self):
         playlists = [p['playlist'] for p in self.execute('listplaylists') if 'playlist' in p]
         playlists.sort()
-        root = Container.cached(name=dacp.BASE_PLAYLIST, is_base=True)
+        root = Container.cached(name=constants.BASE_PLAYLIST, is_base=True)
         return [root] + [Container.cached(name=p, is_base=False) for p in playlists if p]
 
     def get_artists(self):

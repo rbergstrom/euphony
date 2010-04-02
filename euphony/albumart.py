@@ -29,7 +29,7 @@ import StringIO
 import urllib
 import urllib2
 
-import dacp
+import constants
 import db
 import util
 
@@ -41,7 +41,7 @@ LASTFM_ROOT = 'http://ws.audioscrobbler.com/2.0'
 IMAGE_SIZES = ('extralarge', 'large', 'medium', 'small')
 
 HEADERS = {
-    'User-Agent': dacp.DAAP_SERVER,
+    'User-Agent': constants.DAAP_SERVER,
 }
 
 not_found = set()

@@ -1,4 +1,4 @@
-# coding: utf8
+#!/usr/bin/env python
 
 # The MIT License
 #
@@ -22,11 +22,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from nose import tools
-from euphony.pairing import generate_code
+if __name__ == '__main__':
+    import sys
 
-class TestPairingCode:
-    def test_code_gen(self):
-        code = generate_code('3861', 'D06F5B3577C7A001')
-        tools.assert_equals(len(code), 32)
-        tools.assert_equals(code, '0BD8D9D49E66BB17F8BD0367A4E42058')
+    from euphony import start_app, stop_app
+    from config import current as config
+
+    try:
+        print('Listening on %s:%d...' % (str(config.server.host), int(config.server.port)))
+        start_app(sys.argv)
+    except KeyboardInterrupt:
+        print('Shutting down...')
+        stop_app()

@@ -1,7 +1,11 @@
+euphony/dacpy
+.coverage
+dist
 
-*.pyc
+*egg-info
 *.pyo
-*~
+*.pyc
 *.log
-*.swp
-Thumbs.db
+*.db
+*~
+

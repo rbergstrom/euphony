@@ -27,7 +27,10 @@ import re
 from tornado import web, escape
 
 import albumart
-import dacp
+import constants
+import dacpy.pairing
+import dacpy.tags
+import dacpy.types
 import euphony
 import query
 import util
@@ -54,7 +57,7 @@ def fetch_properties(properties, source):
     result = []
     for p in properties:
         try:
-            propinfo = dacp.PROPERTIES[p]
+            propinfo = dacpy.tags.PROPERTIES[p]
             value = source.get_property(p)
             if value is not None:
                 result.append((propinfo[0], value))
@@ -93,15 +96,15 @@ class WebListRemotesHandler(web.RequestHandler):
 class DMAPRequestHandler(web.RequestHandler):
     def prepare(self):
         self.set_header('Content-Type', 'application/x-dmap-tagged')
-        self.set_header('DAAP-Server', dacp.DAAP_SERVER)
+        self.set_header('DAAP-Server', constants.DAAP_SERVER)
 
 class ServerInfoHandler(DMAPRequestHandler):
     def get(self):
-        node = dacp.build_node(('msrv', [
+        node = dacpy.types.build_node(('msrv', [
             ('mstt', 200),
-            ('mpro', dacp.DMAP_PROTOCOL_VERSION),
-            ('apro', dacp.DAAP_PROTOCOL_VERSION),
-            ('aeSV', dacp.ITUNES_SHARING_VERSION),
+            ('mpro', constants.DMAP_PROTOCOL_VERSION),
+            ('apro', constants.DAAP_PROTOCOL_VERSION),
+            ('aeSV', constants.ITUNES_SHARING_VERSION),
             ('aeFP', True),
             ('ated', 3),
             ('msed', 1),
@@ -114,7 +117,7 @@ class ServerInfoHandler(DMAPRequestHandler):
             ('ceVO', False),
             ('minm', config.server.name),
             ('mslr', True),
-            ('mstm', dacp.DACP_TIMEOUT),
+            ('mstm', constants.DACP_TIMEOUT),
             ('msal', True),
             ('msas', 3),
             ('msup', True),
@@ -136,7 +139,7 @@ class LoginHandler(DMAPRequestHandler):
         guid = int(self.get_argument('pairing-guid'), 16)
         if db.pairing.find_one({'guid': guid}) is not None:
             sid = util.generate_sessionid(guid)
-            node =dacp.build_node(('mlog', [
+            node =dacpy.types.build_node(('mlog', [
                 ('mstt', 200),
                 ('mlid', sid),
             ]))
@@ -150,7 +153,7 @@ class UpdateHandler(DMAPRequestHandler):
         mpd.register_update_callback(self.send_response, int(self.get_argument('revision-number', 1)))
 
     def send_response(self):
-        node = dacp.build_node(('mupd', [
+        node = dacpy.types.build_node(('mupd', [
             ('mstt', 200),
             ('musr', mpd.revision_number + 1),
         ]))
@@ -159,7 +162,7 @@ class UpdateHandler(DMAPRequestHandler):
 
 class DatabaseHandler(DMAPRequestHandler):
     def get(self):
-        node = dacp.build_node(('avdb', [
+        node = dacpy.types.build_node(('avdb', [
             ('mstt', 200),
             ('muty', False),
             ('mtco', 1),
@@ -185,7 +188,7 @@ class ContainersHandler(DMAPRequestHandler):
 
         container_nodes = [('mlit', fetch_properties(properties, c)) for c in containers]
 
-        node = dacp.build_node(('aply', [
+        node = dacpy.types.build_node(('aply', [
             ('mstt', 200),
             ('muty', 0),
             ('mtco', len(containers)),
@@ -217,7 +220,7 @@ class ContainerItemsHandler(DMAPRequestHandler):
 
         item_nodes = [('mlit', fetch_properties(properties, i)) for i in items]
 
-        node = dacp.build_node(('apso', [
+        node = dacpy.types.build_node(('apso', [
             ('mstt', 200),
             ('muty', 0),
             ('mtco', len(item_nodes)),
@@ -246,7 +249,7 @@ class ContainerEditHandler(DMAPRequestHandler):
         item = Item.get(item_id)
         if item:
             container.add_item(item)
-            self.write(dacp.build_node(('medc', [
+            self.write(dacpy.types.build_node(('medc', [
                 ('mstt', 200),
                 ('mlit', []),
             ])).serialize())
@@ -270,7 +273,7 @@ class DatabaseEditHandler(DMAPRequestHandler):
     def add_playlist(self, name):
         pl = mpd.create_playlist(name)
 
-        self.write(dacp.build_node(('medc', [
+        self.write(dacpy.types.build_node(('medc', [
             ('mstt', 200),
             ('miid', pl.id),
         ])).serialize())
@@ -309,7 +312,7 @@ class GroupsHandler(DMAPRequestHandler):
                 ]))
             node_list.append(('mshl', header_nodes))
 
-        node = dacp.build_node(('agal', node_list))
+        node = dacpy.types.build_node(('agal', node_list))
         self.write(node.serialize())
 
 class GroupArtHandler(DMAPRequestHandler):
@@ -353,12 +356,12 @@ class BrowseArtistHandler(DMAPRequestHandler):
                 ]))
             node_list.append(('mshl', header_nodes))
 
-        node = dacp.build_node(('abro', node_list))
+        node = dacpy.types.build_node(('abro', node_list))
         self.write(node.serialize())
 
 class ControlInterfaceHandler(DMAPRequestHandler):
     def get(self):
-        node = dacp.build_node(('caci', [
+        node = dacpy.types.build_node(('caci', [
             ('mstt', 200),
             ('muty', 0),
             ('mtco', 1),
@@ -395,7 +398,7 @@ class CueHandler(DMAPRequestHandler):
     def command_clear(self):
         mpd.clear_current()
 
-        self.write(dacp.build_node(('cacr', [
+        self.write(dacpy.types.build_node(('cacr', [
             ('mstt', 200),
             ('miid', 0),
         ])).serialize())
@@ -409,7 +412,7 @@ class CueHandler(DMAPRequestHandler):
             mpd.add_to_current(i.uri)
         mpd.play(index)
 
-        self.write(dacp.build_node(('cacr', [
+        self.write(dacpy.types.build_node(('cacr', [
             ('mstt', 200),
             ('miid', 0),
         ])).serialize())
@@ -417,7 +420,7 @@ class CueHandler(DMAPRequestHandler):
 
 class GetSpeakerHandler(DMAPRequestHandler):
     def get(self):
-        node = dacp.build_node(('casp', [
+        node = dacpy.types.build_node(('casp', [
             ('mstt', 200),
             ('mdcl', [
                 ('caia', 1),
@@ -442,7 +445,7 @@ class GetPropertyHandler(DMAPRequestHandler):
             properties.remove('dacp.playingtime')
 
         node_list += fetch_properties(properties, mpd)
-        node = dacp.build_node(('cmgt', node_list))
+        node = dacpy.types.build_node(('cmgt', node_list))
 
         self.write(node.serialize())
 
@@ -472,7 +475,7 @@ class PlayStatusUpdateHandler(DMAPRequestHandler):
             ('caar', mpd.get_property('dacp.availablerepeatstates')),
         ]
 
-        if player_state != dacp.PLAYER_STATE_STOPPED:
+        if player_state != constants.PLAYER_STATE_STOPPED:
             songinfo = mpd.get_current_track()
             timeinfo = mpd.get_current_time()
             node_list += [
@@ -488,7 +491,7 @@ class PlayStatusUpdateHandler(DMAPRequestHandler):
                 ('cast', timeinfo[1]),
             ]
 
-        node = dacp.build_node(('cmst', node_list))
+        node = dacpy.types.build_node(('cmst', node_list))
 
         self.write(node.serialize())
         self.finish()
