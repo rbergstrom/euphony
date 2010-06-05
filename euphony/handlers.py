@@ -36,7 +36,7 @@ import query
 import util
 
 from config import current as config
-from db import db
+from db import db, PairingRecord
 from mpdplayer import mpd, Container, Artist, Album, Item
 
 __all__ = [
@@ -75,7 +75,7 @@ class WebPairingHandler(web.RequestHandler):
         remote_id = self.get_argument('remotes')
         try:
             remote = app.remote_listener.remotes[remote_id]
-            remote.pair(code, config.server.id)
+	    PairingRecord.add(guid=remote.pair(code, config.server.id))
         except KeyError:
             raise web.HTTPError(500)
         except Exception as e:
@@ -139,7 +139,7 @@ class LoginHandler(DMAPRequestHandler):
         guid = int(self.get_argument('pairing-guid'), 16)
         if db.pairing.find_one({'guid': guid}) is not None:
             sid = util.generate_sessionid(guid)
-            node =dacpy.types.build_node(('mlog', [
+            node = dacpy.types.build_node(('mlog', [
                 ('mstt', 200),
                 ('mlid', sid),
             ]))
@@ -190,7 +190,7 @@ class ContainersHandler(DMAPRequestHandler):
 
         node = dacpy.types.build_node(('aply', [
             ('mstt', 200),
-            ('muty', 0),
+            ('muty', 1),
             ('mtco', len(containers)),
             ('mrco', len(containers)),
             ('mlcl', container_nodes),
@@ -505,8 +505,8 @@ class NowPlayingArtHandler(DMAPRequestHandler):
             artwork = albumart.AlbumArt(songinfo['artist'], songinfo['album'])
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
-        except albumart.ArtNotFoundError:
-            raise web.HTTPError(404)
+        except (KeyError, albumart.ArtNotFoundError):
+            raise web.HTTPError(204)
 
 class PlaySpecHandler(DMAPRequestHandler):
     def get(self):
