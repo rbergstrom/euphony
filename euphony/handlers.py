@@ -32,6 +32,7 @@ import dacpy.pairing
 import dacpy.tags
 import dacpy.types
 import euphony
+import logging
 import query
 import util
 
@@ -109,9 +110,9 @@ class ServerInfoHandler(DMAPRequestHandler):
             ('ated', 3),
             ('msed', 1),
             ('msml', [
-                ('msma', 71359108752128L),
-                ('msma', 1102738509824L),
-                ('msma', 8799319904256L),
+                ('msma', 0x0000298F668C2400L),
+                ('msma', 0x00000100C0565000L),
+                ('msma', 0x00000800C0565000L),
             ]),
             ('ceWM', ''),
             ('ceVO', False),
@@ -131,7 +132,6 @@ class ServerInfoHandler(DMAPRequestHandler):
             ('mstc', datetime.datetime.utcnow),
             ('msto', util.get_tz_offset)
         ]))
-
         self.write(node.serialize())
 
 class LoginHandler(DMAPRequestHandler):
@@ -178,7 +178,6 @@ class DatabaseHandler(DMAPRequestHandler):
                 ]),
             ]),
         ]))
-
         self.write(node.serialize())
 
 class ContainersHandler(DMAPRequestHandler):
@@ -195,7 +194,6 @@ class ContainersHandler(DMAPRequestHandler):
             ('mrco', len(containers)),
             ('mlcl', container_nodes),
         ]))
-
         self.write(node.serialize())
 
 class ContainerItemsHandler(DMAPRequestHandler):
@@ -378,7 +376,6 @@ class ControlInterfaceHandler(DMAPRequestHandler):
                 ]),
             ]),
         ]))
-
         self.write(node.serialize())
 
 class CueHandler(DMAPRequestHandler):
@@ -428,7 +425,6 @@ class GetSpeakerHandler(DMAPRequestHandler):
                 ('msma', 0),
             ]),
         ]))
-
         self.write(node.serialize())
 
 class GetPropertyHandler(DMAPRequestHandler):
@@ -446,7 +442,6 @@ class GetPropertyHandler(DMAPRequestHandler):
 
         node_list += fetch_properties(properties, mpd)
         node = dacpy.types.build_node(('cmgt', node_list))
-
         self.write(node.serialize())
 
 class SetPropertyHandler(DMAPRequestHandler):
@@ -492,7 +487,6 @@ class PlayStatusUpdateHandler(DMAPRequestHandler):
             ]
 
         node = dacpy.types.build_node(('cmst', node_list))
-
         self.write(node.serialize())
         self.finish()
 
@@ -520,7 +514,7 @@ class PlaySpecHandler(DMAPRequestHandler):
             mpd.load_playlist(container.name)
             if index < 0:
                 raise web.HTTPError(404)
-            mpd.play(1 + index)
+            mpd.play(index)
         except KeyError:
             raise web.HTTPError(404)
 

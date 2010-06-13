@@ -21,6 +21,7 @@
 # THE SOFTWARE.
 
 import collections
+import logging
 import socket
 import threading
 
@@ -111,7 +112,7 @@ class CachedIDMixin(object):
     def get(cls, obj_id):
         try:
             record = itemcache[cls.__name__.lower()][obj_id]
-            return cls(id=obj_id, **record)
+            return record
         except KeyError:
             return None
 
@@ -120,9 +121,11 @@ class CachedIDMixin(object):
         itemtype = cls.__name__.lower()
         extra = kwargs.pop('extra', {})
         try:
-            for (k, v) in itemcache[itemtype].iteritems():
-                if v == kwargs:
-                    return cls(id=k, extra=extra, **kwargs)
+            for cache_item in itemcache[itemtype].values():
+                for (k, v) in kwargs.iteritems():
+                    if getattr(cache_item, k, None) != v:
+                        break
+                    return cache_item
         except KeyError:
             pass
 
@@ -130,9 +133,9 @@ class CachedIDMixin(object):
             itemcache[itemtype] = {}
 
         obj_id = 1 + len(itemcache[itemtype])
-        itemcache[itemtype][obj_id] = kwargs
-
-        return cls(id=obj_id, extra=extra, **kwargs)
+        record = cls(id=obj_id, extra=extra, **kwargs)
+        itemcache[itemtype][obj_id] = record
+        return record
 
 class Container(PropertyMixin, CachedIDMixin):
     def __init__(self, id, name, is_base=False, **kwargs):
@@ -533,3 +536,7 @@ class MPD(PropertyMixin, MPDMixin):
         return albums
 
 mpd = MPD(str(config.mpd.host), int(config.mpd.port))
+
+# Hackish way to fill the cache
+mpd.get_containers()[0].fetch_items()
+logging.info("Cache filled")
