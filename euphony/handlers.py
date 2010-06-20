@@ -450,7 +450,7 @@ class SetPropertyHandler(DMAPRequestHandler):
             # Take the last instance of each property, to allow for duplicates
             ret = mpd.set_property(prop, values[-1])
             if ret is None:
-                print "Unknown Property: %s (Value = %s)" % (prop, values)
+                logging.info("Unknown Property: %s (Value = %s)" % (prop, values))
 
 class PlayStatusUpdateHandler(DMAPRequestHandler):
     @web.asynchronous

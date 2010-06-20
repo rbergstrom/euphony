@@ -104,6 +104,7 @@ class EuphonyServer(object):
         self.mdns.close()
 
 def start_app(argv):
+    import sys
     from optparse import OptionParser
 
     parser = OptionParser()
@@ -111,6 +112,11 @@ def start_app(argv):
                       action='store_true',
                       dest='verbose',
                       help='Spam the log with lots of information',
+                      default=False)
+    parser.add_option('-d', '--debug',
+                      action='store_true',
+                      dest='debug',
+                      help='Log debug information',
                       default=False)
     parser.add_option('-s', '--stdout',
                       action='store_true',
@@ -121,15 +127,22 @@ def start_app(argv):
 
     (options, args) = parser.parse_args(argv)
 
-    if options.verbose:
-        loglevel = logging.INFO
-    else:
-        loglevel = logging.WARNING
+    logger = logging.getLogger()
 
-    if options.stdout:
-        logging.basicConfig(level=loglevel)
+    if options.debug:
+        logger.setLevel(logging.DEBUG)
+    elif options.verbose:
+        logger.setLevel(logging.INFO)
     else:
-        logging.basicConfig(filename=config.logging.filename, level=loglevel)
+        logger.setLevel(logging.WARNING)
+
+    if not options.stdout:
+        sys.stdout = sys.stderr = open(config.logging.filename, 'w')
+
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
     app = EuphonyServer.instance()
     http_server = HTTPServer(app.wsgi_app)
@@ -142,3 +155,4 @@ def stop_app():
     EuphonyServer.instance().stop_zeroconf()
     IOLoop.instance().stop()
     logging.info('Server stopped.')
+    logging.shutdown()

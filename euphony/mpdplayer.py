@@ -497,7 +497,6 @@ class MPD(PropertyMixin, MPDMixin):
 
     @property_setter('dmcp.volume')
     def set_volume(self, value):
-        print 'Setting volume to %s' % str(value)
         self.execute('setvol', str(value))
 
     def get_current_track(self):
