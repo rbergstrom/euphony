@@ -375,11 +375,6 @@ class MPD(PropertyMixin, MPDMixin):
         self.revision_number = 1
         self._update_callbacks = {}
         self._update_callbacks_lock = threading.Lock()
-        
-        self.containers = IndexedCollection(Container)
-        self.artists = IndexedCollection(Artist)
-        self.albums = IndexedCollection(Album)
-        self.items = IndexedCollection(Item)
 
         self.update_db()
     
@@ -414,6 +409,7 @@ class MPD(PropertyMixin, MPDMixin):
             pass
     
     def _update_playlists(self):
+        self.containers = IndexedCollection(Container)
         playlists = [p['playlist'] for p in self.execute('listplaylists') if 'playlist' in p and p['playlist']]
         playlists.sort()
 
@@ -423,15 +419,18 @@ class MPD(PropertyMixin, MPDMixin):
             self.containers.add_new(name=p)
 
     def _update_artists(self):
+        self.artists = IndexedCollection(Artist)
         for n in (x for x in util.sort_by_initial(self.execute('list', 'artist')) if x):
             self.artists.add_new(name=n)
 
     def _update_albums(self):
+        self.albums = IndexedCollection(Album)
         for a in self.artists:
             for n in (x for x in self.execute('list', 'album', 'artist', a.name) if x):
                 self.albums.add_new(name=n, artist=a.name)
 
     def _update_items(self):
+        self.items = IndexedCollection(Item)
         for i in (x for x in self.execute('listallinfo', '') if 'title' in x):
             try:
                 track = int(str(i['track']).split('/')[0])
