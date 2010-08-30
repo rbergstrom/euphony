@@ -38,7 +38,7 @@ import util
 
 from config import current as config
 from db import db, PairingRecord
-from mpdplayer import mpd, Container, Artist, Album, Item
+from mpdplayer import MPD 
 
 __all__ = [
     'ServerInfoHandler', 'LoginHandler', 'UpdateHandler', 'DatabaseHandler', 'ContainersHandler',
@@ -48,6 +48,7 @@ __all__ = [
     'DatabaseEditHandler', 'ContainerEditHandler', 'PlaySpecHandler', 'CueHandler',
 ]
 
+mpd = MPD(str(config.mpd.host), int(config.mpd.port))
 
 def query_to_dict(query):
     """ Turns a **simple** query (ignores subgroups) into a dict """
@@ -173,7 +174,7 @@ class DatabaseHandler(DMAPRequestHandler):
                     ('mper', 1L),
                     ('minm', config.server.name),
                     ('mimc', 1),
-                    ('mctc', len(mpd.get_containers())),
+                    ('mctc', len(mpd.containers)),
                     ('meds', 3),
                 ]),
             ]),
@@ -182,16 +183,15 @@ class DatabaseHandler(DMAPRequestHandler):
 
 class ContainersHandler(DMAPRequestHandler):
     def get(self, db):
-        containers = mpd.get_containers()
         properties = self.get_argument('meta').split(',')
 
-        container_nodes = [('mlit', fetch_properties(properties, c)) for c in containers]
+        container_nodes = [('mlit', fetch_properties(properties, c)) for c in mpd.containers]
 
         node = dacpy.types.build_node(('aply', [
             ('mstt', 200),
             ('muty', 1),
-            ('mtco', len(containers)),
-            ('mrco', len(containers)),
+            ('mtco', len(mpd.containers)),
+            ('mrco', len(mpd.containers)),
             ('mlcl', container_nodes),
         ]))
         self.write(node.serialize())
@@ -203,17 +203,16 @@ class ContainerItemsHandler(DMAPRequestHandler):
         query_type = self.get_argument('type', None)
         query_string = self.get_argument('query', None)
 
-        container = Container.get(int(container_id))
+        container = mpd.containers.get_by_id(int(container_id))
 
         if container is None:
             raise web.HTTPError(400)
 
         if query_string:
-            items = query.apply_query(query_string, container.fetch_items())
+            items = list(container.items.query(query_string))
         else:
-            items = container.fetch_items()
+            items = list(container.items)
 
-        items = list(items)
         items.sort(key=operator.attrgetter('track'))
 
         item_nodes = [('mlit', fetch_properties(properties, i)) for i in items]
@@ -233,7 +232,7 @@ class ContainerEditHandler(DMAPRequestHandler):
         action = self.get_argument('action')
         params = query_to_dict(self.get_argument('edit-params'))
 
-        container = Container.get(int(container_id))
+        container = mpd.containers.get_by_id(int(container_id))
 
         try:
             if action == 'add':
@@ -244,7 +243,7 @@ class ContainerEditHandler(DMAPRequestHandler):
             raise web.HTTPError(404)
 
     def add_to_container(self, container, item_id):
-        item = Item.get(item_id)
+        item = mpd.items.get_by_id(int(item_id))
         if item:
             container.add_item(item)
             self.write(dacpy.types.build_node(('medc', [
@@ -285,8 +284,7 @@ class GroupsHandler(DMAPRequestHandler):
         include_headers = bool(int(self.get_argument('include-sort-headers', 0)))
         properties = self.get_argument('meta').split(',')
 
-        albums = query.apply_query(query_string, mpd.get_albums())
-        albums = util.sort_by_initial(list(albums), key=operator.attrgetter('name'))
+        albums = util.sort_by_initial(mpd.albums.query(query_string), key=operator.attrgetter('name'))
 
         properties.append('dmap.itemcount')
         name_nodes = [('mlit', fetch_properties(properties, a)) for a in albums]
@@ -318,7 +316,7 @@ class GroupArtHandler(DMAPRequestHandler):
         width = int(self.get_argument('mw', 55))
         height = int(self.get_argument('mh', 55))
         try:
-            album = Album.get(int(group))
+            album = mpd.albums.get_by_id(int(group))
             artwork = albumart.AlbumArt(album.artist.name, album.name)
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
@@ -330,8 +328,7 @@ class BrowseArtistHandler(DMAPRequestHandler):
         filter_string = self.get_argument('filter')
         include_headers = bool(int(self.get_argument('include-sort-headers', 0)))
 
-        artists = query.apply_query(filter_string, mpd.get_artists())
-        artists = util.sort_by_initial(list(artists), key=operator.attrgetter('name'))
+        artists = util.sort_by_initial(mpd.artists.query(filter_string), key=operator.attrgetter('name'))
 
         name_nodes = [('mlit', a.name) for a in artists]
 
@@ -401,8 +398,7 @@ class CueHandler(DMAPRequestHandler):
         ])).serialize())
 
     def command_play(self, query_string, index):
-        container = Container.root_container()
-        items = list(query.apply_query(query_string, container.fetch_items()))
+        items = list(mpd.items.query(query_string))
         items.sort(key=operator.attrgetter('album.name', 'track'))
 
         for i in items:

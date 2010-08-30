@@ -55,6 +55,8 @@ def get_initial(name):
         return ''
 
 def sort_by_initial(names, key=None):
+    if not isinstance(names, list):
+        names = list(names)
     if key is not None and callable(key):
         names.sort(key=lambda x: ('%s %s' % (get_initial(key(x)), key(x))))
     else:

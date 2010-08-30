@@ -28,14 +28,13 @@ import threading
 import constants
 import mpdclient
 import util
+import query
 
 from config import current as config
 
 __all__ = ['MPD', 'Container', 'Album', 'Artist', 'mpd']
 
 SERVER_NAME = u'MPD@%s'
-
-itemcache = {}
 
 class InvalidItemError(ValueError):
     pass
@@ -66,15 +65,18 @@ class property_setter(object):
 
 class PropertyMeta(type):
     def __init__(cls, name, bases, attrs):
-        props = collections.defaultdict(dict)
+        cls._properties = collections.defaultdict(dict)
         for (k, v) in attrs.iteritems():
             if hasattr(v, 'prop_name') and hasattr(v, 'prop_type'):
                 for n in v.prop_name:
-                    props[v.prop_type][n] = v
-        cls._properties = props
+                    cls._properties[v.prop_type][n] = v
 
 class PropertyMixin(object):
     __metaclass__ = PropertyMeta
+    
+    def enumerate_properties(self):
+        for (prop, func) in self._properties['get'].iteritems():
+            yield (prop, func(self))
 
     def get_property(self, name):
         try:
@@ -87,6 +89,11 @@ class PropertyMixin(object):
             return self._properties['set'][name](self, value)
         except KeyError:
             return None
+
+class MPDObjectMixin(object):
+    def __init__(self, id):
+        self.id = id
+        self.mpd = MPD.instance()
 
 class MPDMixin(object):
     def __init__(self, host, port, password=None):
@@ -107,48 +114,23 @@ class MPDMixin(object):
         client.disconnect()
         return retval
 
-class CachedIDMixin(object):
-    @classmethod
-    def get(cls, obj_id):
-        try:
-            record = itemcache[cls.__name__.lower()][obj_id]
-            return record
-        except KeyError:
-            return None
-
-    @classmethod
-    def cached(cls, **kwargs):
-        itemtype = cls.__name__.lower()
-        extra = kwargs.pop('extra', {})
-        try:
-            for cache_item in itemcache[itemtype].values():
-                for (k, v) in kwargs.iteritems():
-                    if getattr(cache_item, k, None) != v:
-                        break
-                    return cache_item
-        except KeyError:
-            pass
-
-        if itemtype not in itemcache:
-            itemcache[itemtype] = {}
-
-        obj_id = 1 + len(itemcache[itemtype])
-        record = cls(id=obj_id, extra=extra, **kwargs)
-        itemcache[itemtype][obj_id] = record
-        return record
-
-class Container(PropertyMixin, CachedIDMixin):
-    def __init__(self, id, name, is_base=False, **kwargs):
-        self.id = id
+class Container(PropertyMixin, MPDObjectMixin):
+    def __init__(self, id, name, is_base=False):
+        MPDObjectMixin.__init__(self, id)
         self.name = name
         self.is_base = is_base
-
         # this MUST be zero for the remote to "see" the playlist
         self.parent_container_id = 0
+        
+        if self.is_base:
+            self.items = self.mpd.items
+        else:
+            plfiles = set(self.mpd.execute('listplaylist', self.name))
+            self.items = IndexedCollection(Item)
+            for i in [x for x in self.mpd.items if x.uri in plfiles]:
+                self.items.add_item(i)
 
-    @classmethod
-    def root_container(cls):
-        return cls.get(1)
+        self.item_count = len(self.items)
 
     def __str__(self):
         return 'Container: %s' % self.name
@@ -157,7 +139,7 @@ class Container(PropertyMixin, CachedIDMixin):
         return u'Container: %s' % self.name
 
     def add_item(self, item):
-        mpd.execute('playlistadd', self.name, item.uri)
+        self.mpd.execute('playlistadd', self.name, item.uri)
 
     def get_item_index(self, itemid):
         items = self.fetch_items()
@@ -165,13 +147,6 @@ class Container(PropertyMixin, CachedIDMixin):
             if items[i].id == itemid:
                 return i
         return -1
-
-    def fetch_items(self):
-        if self.is_base:
-            items = [i for i in mpd.execute('listallinfo', '')  if 'title' in i]
-        else:
-            items = [i for i in mpd.execute('listplaylistinfo', self.name) if 'title' in i]
-        return [Item.cached(uri=i['file'], extra=i) for i in items]
 
     @property_getter('dmap.itemname')
     def get_name(self):
@@ -184,10 +159,7 @@ class Container(PropertyMixin, CachedIDMixin):
 
     @property_getter('dmap.itemcount')
     def get_item_count(self):
-        if self.is_base:
-            return len([item for item in mpd.execute('listall', '') if 'file' in item])
-        else:
-            return len(mpd.execute('listplaylist', self.name))
+        return self.item_count
 
     @property_getter('dmap.parentcontainerid')
     def get_parent_container_id(self):
@@ -201,10 +173,9 @@ class Container(PropertyMixin, CachedIDMixin):
     def get_is_base_playlist(self):
         return self.is_base
 
-
-class Artist(PropertyMixin, CachedIDMixin):
-    def __init__(self, id, name, **kwargs):
-        self.id = id
+class Artist(PropertyMixin, MPDObjectMixin):
+    def __init__(self, id, name):
+        MPDObjectMixin.__init__(self, id)
         self.name = name
 
     def __str__(self):
@@ -222,11 +193,12 @@ class Artist(PropertyMixin, CachedIDMixin):
     def get_id(self):
         return self.id
 
-class Album(PropertyMixin, CachedIDMixin):
-    def __init__(self, id, name, artist, **kwargs):
-        self.id = id
+class Album(PropertyMixin, MPDObjectMixin):
+    def __init__(self, id, name, artist):
+        MPDObjectMixin.__init__(self, id)
         self.name = name
-        self.artist = Artist.cached(name=artist)
+        self.artist = self.mpd.artists.first({'dmap.itemname': artist})
+        self.item_count = len(self.mpd.execute('list', 'title', 'album', self.name))
 
     def __str__(self):
         return 'Album: %s' % self.name
@@ -250,19 +222,16 @@ class Album(PropertyMixin, CachedIDMixin):
 
     @property_getter('dmap.itemcount')
     def get_item_count(self):
-            return len(mpd.execute('list', 'title', 'album', self.name))
+        return self.item_count
 
-class Item(PropertyMixin, CachedIDMixin):
-    def __init__(self, id, uri, extra, **kwargs):
-        self.id = id
+class Item(PropertyMixin, MPDObjectMixin):
+    def __init__(self, id, name, uri, artist, album, track=1):
+        MPDObjectMixin.__init__(self, id)
         self.uri = uri
-        self.name = extra['title']
-        self.artist = Artist.cached(name=extra['artist'])
-        self.album = Album.cached(name=extra['album'], artist=extra['artist'])
-        try:
-            self.track = int(str(extra['track']).split('/')[0])
-        except KeyError:
-            self.track = 1
+        self.name = name
+        self.artist = self.mpd.artists.first({'dmap.itemname': artist})
+        self.album = self.mpd.albums.first({'dmap.itemname': album, 'dmap.songartist': artist})
+        self.track = track 
 
         self.item_kind = 2
         self.content_description = ''
@@ -307,12 +276,63 @@ class Item(PropertyMixin, CachedIDMixin):
     @property_getter('com.apple.itunes.has-video')
     def get_has_video(self):
         return self.has_video
+    
+class IndexedCollection(object):
+    def __init__(self, cls):
+        if not issubclass(cls, PropertyMixin):
+            raise TypeError('Can only index classes implementing PropertyMixin')
+
+        self._cls = cls
+        self._items = []
+        self.indexes = {}
+        self.ids = set()
+    
+    def __len__(self):
+        return len(self._items)
+
+    def __iter__(self):
+        for item in self._items:
+            yield item
+
+    def add_new(self, **kwargs):
+        if 'id' not in kwargs:
+            kwargs['id'] = len(self)
+        return self.add_item(self._cls(**kwargs))
+    
+    def add_item(self, item):
+        list_index = len(self)
+        self.ids.add(list_index)
+        self._items.append(item)
+        for (prop, value) in item.enumerate_properties():
+            if (prop not in self.indexes):
+                self.indexes[prop] = {}
+            if (value not in self.indexes[prop]):
+                self.indexes[prop][value] = []
+            self.indexes[prop][value].append(list_index)
+        return item
+
+    def query(self, querystring):
+        return (self._items[x] for x in query.parse_query_string(querystring)(self))
+
+    def get_by_id(self, id):
+        return self.first({'dmap.itemid': id})
+
+    def get(self, props):
+        ids = []
+        for (prop, value) in props.iteritems():
+            if prop in self.indexes and value in self.indexes[prop]:
+                ids.extend(self.indexes[prop][value])
+        return (self._items[x] for x in ids)
+
+    def first(self, props):
+        return list(self.get(props))[0]
 
 class MPDIdler(threading.Thread, MPDMixin):
-    def __init__(self, host, port, password=None):
+    def __init__(self, subsystems, host, port, password=None):
         threading.Thread.__init__(self)
         MPDMixin.__init__(self, host, port, password)
         self.daemon = True
+        self.subsystems = subsystems
 
         self._callback_lock = threading.Lock()
         self._callbacks = []
@@ -331,25 +351,44 @@ class MPDIdler(threading.Thread, MPDMixin):
 
     def run(self):
         while not self._done:
-            self.execute('idle', 'playlist, player, options, mixer')
+            self.execute('idle', self.subsystems)
             with self._callback_lock:
                 for callback in self._callbacks:
                     callback()
 
-class MPD(PropertyMixin, MPDMixin):
+class MPD(PropertyMixin, MPDMixin):  
     def __init__(self, host, port, password=None):
+        if not hasattr(self.__class__, '_instance'):
+            MPD._instance = self
         MPDMixin.__init__(self, host, port, password)
-
+        
         self.server_name = self._get_server_name()
 
+        self._status_idler = MPDIdler('playlist, player, options, mixer', host, port, password)
+        self._status_idler.register_callback(self._update_event)
+        self._status_idler.start()
+        
+        self._db_idler = MPDIdler('database', host, port, password)
+        self._db_idler.register_callback(self.update_db)
+        self._db_idler.start()
+        
         self.revision_number = 1
         self._update_callbacks = {}
         self._update_callbacks_lock = threading.Lock()
+        
+        self.containers = IndexedCollection(Container)
+        self.artists = IndexedCollection(Artist)
+        self.albums = IndexedCollection(Album)
+        self.items = IndexedCollection(Item)
 
-        self.idler = MPDIdler(host, port, password)
-        self.idler.register_callback(self._update_event)
-        self.idler.start()
-
+        self.update_db()
+    
+    @classmethod
+    def instance(cls):
+        if not hasattr(cls, '_instance'):
+            cls._instance = cls()
+        return cls._instance
+    
     def _get_server_name(self):
         hostname = socket.getfqdn(self.host)
         if hostname == 'localhost':
@@ -373,11 +412,53 @@ class MPD(PropertyMixin, MPDMixin):
                 del self._update_callbacks[self.revision_number]
         except KeyError:
             pass
+    
+    def _update_playlists(self):
+        playlists = [p['playlist'] for p in self.execute('listplaylists') if 'playlist' in p and p['playlist']]
+        playlists.sort()
+
+        self.root_playlist = self.containers.add_new(name=constants.BASE_PLAYLIST, is_base=True)
+
+        for p in playlists:
+            self.containers.add_new(name=p)
+
+    def _update_artists(self):
+        for n in (x for x in util.sort_by_initial(self.execute('list', 'artist')) if x):
+            self.artists.add_new(name=n)
+
+    def _update_albums(self):
+        for a in self.artists:
+            for n in (x for x in self.execute('list', 'album', 'artist', a.name) if x):
+                self.albums.add_new(name=n, artist=a.name)
+
+    def _update_items(self):
+        for i in (x for x in self.execute('listallinfo', '') if 'title' in x):
+            try:
+                track = int(str(i['track']).split('/')[0])
+            except KeyError:
+                track = 1
+
+            self.items.add_new(
+                name = i['title'],
+                uri = i['file'],
+                artist = i['artist'],
+                album = i['album'],
+                track = track)
+
+
+    def update_db(self):
+        self._update_artists()
+        self._update_albums()
+        self._update_items()
+        self._update_playlists()
+
+    def root_playlist(self):
+        return self.root_playlist
 
     def create_playlist(self, name):
         self.execute('save', name)
         self.execute('playlistclear', name)
-        return Container.cached(name=name, is_base=False)
+        return self.containers.add_new(name=name, is_base=False)
 
     def delete_playlist(self, name):
         self.execute('rm', name)
@@ -512,30 +593,9 @@ class MPD(PropertyMixin, MPDMixin):
     @property_getter('daap.songalbumid')
     def get_current_album_id(self):
         songinfo = self.execute('currentsong')
-        return Album.cached(name=songinfo['title'], artist=songinfo['artist']).id
+        album = self.albums.first({
+            'dmap.itemname': songinfo['title'],
+            'dmap.songartist': songinfo['artist']
+        })
+        return album.id
 
-    def get_containers(self):
-        playlists = [p['playlist'] for p in self.execute('listplaylists') if 'playlist' in p]
-        playlists.sort()
-        root = Container.cached(name=constants.BASE_PLAYLIST, is_base=True)
-        return [root] + [Container.cached(name=p, is_base=False) for p in playlists if p]
-
-    def get_artists(self):
-        artists = util.sort_by_initial(self.execute('list', 'artist'))
-        return [Artist.cached(name=a) for a in artists if a]
-
-    def get_albums(self):
-        artists = self.get_artists()
-        albums = []
-        for a in artists:
-            albums.extend([
-                Album.cached(name=n, artist=a.name) for n in self.execute('list', 'album', 'artist', a.name) if n
-            ])
-
-        return albums
-
-mpd = MPD(str(config.mpd.host), int(config.mpd.port))
-
-# Hackish way to fill the cache
-mpd.get_containers()[0].fetch_items()
-logging.info("Cache filled")
