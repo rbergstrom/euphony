@@ -276,7 +276,7 @@ class Item(PropertyMixin, MPDObjectMixin):
     @property_getter('com.apple.itunes.has-video')
     def get_has_video(self):
         return self.has_video
-    
+
 class IndexedCollection(object):
     def __init__(self, cls):
         if not issubclass(cls, PropertyMixin):
@@ -286,7 +286,7 @@ class IndexedCollection(object):
         self._items = []
         self.indexes = {}
         self.ids = set()
-    
+
     def __len__(self):
         return len(self._items)
 
@@ -298,7 +298,7 @@ class IndexedCollection(object):
         if 'id' not in kwargs:
             kwargs['id'] = len(self)
         return self.add_item(self._cls(**kwargs))
-    
+
     def add_item(self, item):
         list_index = len(self)
         self.ids.add(list_index)
@@ -325,7 +325,10 @@ class IndexedCollection(object):
         return (self._items[x] for x in ids)
 
     def first(self, props):
-        return list(self.get(props))[0]
+        l = list(self.get(props))
+        if len(l) > 0:
+            return l[0]
+        return None
 
 class MPDIdler(threading.Thread, MPDMixin):
     def __init__(self, subsystems, host, port, password=None):
@@ -361,29 +364,29 @@ class MPD(PropertyMixin, MPDMixin):
         if not hasattr(self.__class__, '_instance'):
             MPD._instance = self
         MPDMixin.__init__(self, host, port, password)
-        
+
         self.server_name = self._get_server_name()
 
         self._status_idler = MPDIdler('playlist, player, options, mixer', host, port, password)
         self._status_idler.register_callback(self._update_event)
         self._status_idler.start()
-        
+
         self._db_idler = MPDIdler('database', host, port, password)
         self._db_idler.register_callback(self.update_db)
         self._db_idler.start()
-        
+
         self.revision_number = 1
         self._update_callbacks = {}
         self._update_callbacks_lock = threading.Lock()
 
         self.update_db()
-    
+
     @classmethod
     def instance(cls):
         if not hasattr(cls, '_instance'):
             cls._instance = cls()
         return cls._instance
-    
+
     def _get_server_name(self):
         hostname = socket.getfqdn(self.host)
         if hostname == 'localhost':
@@ -407,7 +410,7 @@ class MPD(PropertyMixin, MPDMixin):
                 del self._update_callbacks[self.revision_number]
         except KeyError:
             pass
-    
+
     def _update_playlists(self):
         self.containers = IndexedCollection(Container)
         playlists = [p['playlist'] for p in self.execute('listplaylists') if 'playlist' in p and p['playlist']]
@@ -587,14 +590,17 @@ class MPD(PropertyMixin, MPDMixin):
         try:
             return [1000 * int(x) for x in status['time'].split(':')]
         except TypeError:
-            return [0, 0]
+            pass
+        except KeyError:
+            pass
+        return [0, 0]
 
     @property_getter('daap.songalbumid')
     def get_current_album_id(self):
         songinfo = self.execute('currentsong')
         album = self.albums.first({
-            'dmap.itemname': songinfo['title'],
-            'dmap.songartist': songinfo['artist']
+            'dmap.itemname': songinfo['album'],
+            'dmap.songalbumartist': songinfo['artist']
         })
         return album.id
 
