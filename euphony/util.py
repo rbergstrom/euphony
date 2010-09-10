@@ -90,3 +90,9 @@ def get_tz_offset():
 
 def clean_name(name):
     return re.sub(r'(?u)([\W_]+)', '', name.lower())
+
+def de_listify(prop):
+    if isinstance(prop, list):
+        return ','.join(prop)
+    else:
+        return prop

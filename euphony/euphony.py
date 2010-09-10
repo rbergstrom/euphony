@@ -42,33 +42,43 @@ class EuphonyServer(object):
         self.remote_listener = dacpy.pairing.TouchRemoteListener()
         self.player_service = None
 
+        settings = {
+            'static_path': os.path.join(os.path.dirname(__file__), 'static'),
+        }
+
         self.wsgi_app = Application([
-            (r'/web/pairing/?', handlers.WebPairingHandler),
-            (r'/web/pairing/remotes', handlers.WebListRemotesHandler),
-            (r'/server-info', handlers.ServerInfoHandler),
-            (r'/login', handlers.LoginHandler),
-            (r'/update', handlers.UpdateHandler),
-            (r'/databases', handlers.DatabaseHandler),
-            (r'/databases/([0-9]+)/containers', handlers.ContainersHandler),
-            (r'/databases/([0-9]+)/containers/([0-9]+)/items', handlers.ContainerItemsHandler),
-            (r'/databases/([0-9]+)/containers/([0-9]+)/edit', handlers.ContainerEditHandler),
-            (r'/databases/([0-9]+)/edit', handlers.DatabaseEditHandler),
-            (r'/databases/([0-9]+)/groups', handlers.GroupsHandler),
-            (r'/databases/([0-9]+)/groups/([0-9]+)/extra_data/artwork', handlers.GroupArtHandler),
-            (r'/databases/([0-9]+)/browse/artists', handlers.BrowseArtistHandler),
-            (r'/ctrl-int', handlers.ControlInterfaceHandler),
-            (r'/ctrl-int/1/cue', handlers.CueHandler),
-            (r'/ctrl-int/1/getspeakers', handlers.GetSpeakerHandler),
-            (r'/ctrl-int/1/getproperty', handlers.GetPropertyHandler),
-            (r'/ctrl-int/1/setproperty', handlers.SetPropertyHandler),
-            (r'/ctrl-int/1/playstatusupdate', handlers.PlayStatusUpdateHandler),
-            (r'/ctrl-int/1/nowplayingartwork', handlers.NowPlayingArtHandler),
-            (r'/ctrl-int/1/playspec', handlers.PlaySpecHandler),
-            (r'/ctrl-int/1/playpause', handlers.PlayPauseHandler),
-            (r'/ctrl-int/1/pause', handlers.PauseHandler),
-            (r'/ctrl-int/1/nextitem', handlers.NextItemHandler),
-            (r'/ctrl-int/1/previtem', handlers.PrevItemHandler),
-        ])
+            # WEB
+            (r'/web/status/?', handlers.web.StatusDashboardHandler),
+            (r'/web/status/json', handlers.web.CurrentStatusJsonHandler),
+            (r'/web/albumart/([0-9]+)x([0-9]+)/nowplaying', handlers.web.NowPlayingArtHandler),
+            (r'/web/pairing/?', handlers.web.PairingHandler),
+            (r'/web/pairing/remotes', handlers.web.ListRemotesHandler),
+
+            # DMAP
+            (r'/server-info', handlers.dmap.ServerInfoHandler),
+            (r'/login', handlers.dmap.LoginHandler),
+            (r'/update', handlers.dmap.UpdateHandler),
+            (r'/databases', handlers.dmap.DatabaseHandler),
+            (r'/databases/([0-9]+)/containers', handlers.dmap.ContainersHandler),
+            (r'/databases/([0-9]+)/containers/([0-9]+)/items', handlers.dmap.ContainerItemsHandler),
+            (r'/databases/([0-9]+)/containers/([0-9]+)/edit', handlers.dmap.ContainerEditHandler),
+            (r'/databases/([0-9]+)/edit', handlers.dmap.DatabaseEditHandler),
+            (r'/databases/([0-9]+)/groups', handlers.dmap.GroupsHandler),
+            (r'/databases/([0-9]+)/groups/([0-9]+)/extra_data/artwork', handlers.dmap.GroupArtHandler),
+            (r'/databases/([0-9]+)/browse/artists', handlers.dmap.BrowseArtistHandler),
+            (r'/ctrl-int', handlers.dmap.ControlInterfaceHandler),
+            (r'/ctrl-int/1/cue', handlers.dmap.CueHandler),
+            (r'/ctrl-int/1/getspeakers', handlers.dmap.GetSpeakerHandler),
+            (r'/ctrl-int/1/getproperty', handlers.dmap.GetPropertyHandler),
+            (r'/ctrl-int/1/setproperty', handlers.dmap.SetPropertyHandler),
+            (r'/ctrl-int/1/playstatusupdate', handlers.dmap.PlayStatusUpdateHandler),
+            (r'/ctrl-int/1/nowplayingartwork', handlers.dmap.NowPlayingArtHandler),
+            (r'/ctrl-int/1/playspec', handlers.dmap.PlaySpecHandler),
+            (r'/ctrl-int/1/playpause', handlers.dmap.PlayPauseHandler),
+            (r'/ctrl-int/1/pause', handlers.dmap.PauseHandler),
+            (r'/ctrl-int/1/nextitem', handlers.dmap.NextItemHandler),
+            (r'/ctrl-int/1/previtem', handlers.dmap.PrevItemHandler),
+        ], **settings)
 
     @classmethod
     def instance(cls):

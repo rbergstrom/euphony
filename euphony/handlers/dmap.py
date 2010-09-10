@@ -24,7 +24,7 @@ import datetime
 import operator
 import re
 
-from tornado import web, escape
+from tornado import web
 
 import albumart
 import constants
@@ -38,15 +38,7 @@ import util
 
 from config import current as config
 from db import db, PairingRecord
-from mpdplayer import MPD 
-
-__all__ = [
-    'ServerInfoHandler', 'LoginHandler', 'UpdateHandler', 'DatabaseHandler', 'ContainersHandler',
-    'ContainerItemsHandler', 'GroupsHandler', 'GroupArtHandler', 'BrowseArtistHandler',
-    'ControlInterfaceHandler', 'GetSpeakerHandler', 'GetPropertyHandler', 'SetPropertyHandler',
-    'PlayStatusUpdateHandler', 'NowPlayingArtHandler', 'PlayPauseHandler', 'PauseHandler'
-    'DatabaseEditHandler', 'ContainerEditHandler', 'PlaySpecHandler', 'CueHandler',
-]
+from mpdplayer import MPD
 
 mpd = MPD(str(config.mpd.host), int(config.mpd.port))
 
@@ -66,34 +58,6 @@ def fetch_properties(properties, source):
         except KeyError:
             raise web.HTTPError(404)
     return result
-
-class WebPairingHandler(web.RequestHandler):
-    def get(self):
-        self.render('views/pairing.tpl')
-
-    def post(self):
-        app = euphony.EuphonyServer.instance()
-        code = self.get_argument('code')
-        remote_id = self.get_argument('remotes')
-        try:
-            remote = app.remote_listener.remotes[remote_id]
-	    PairingRecord.add(guid=remote.pair(code, config.server.id))
-        except KeyError:
-            raise web.HTTPError(500)
-        except Exception as e:
-            raise web.HTTPError(403)
-        self.write('Pairing succeeded!')
-
-
-class WebListRemotesHandler(web.RequestHandler):
-    def get(self):
-        app = euphony.EuphonyServer.instance()
-        self.set_header('Content-Type', 'application/json')
-        self.write(escape.json_encode({
-            'remotes': dict(
-                [(k, unicode(v)) for k, v in app.remote_listener.remotes.iteritems()]),
-        }))
-
 
 class DMAPRequestHandler(web.RequestHandler):
     def prepare(self):

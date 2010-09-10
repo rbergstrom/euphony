@@ -73,7 +73,7 @@ class PropertyMeta(type):
 
 class PropertyMixin(object):
     __metaclass__ = PropertyMeta
-    
+
     def enumerate_properties(self):
         for (prop, func) in self._properties['get'].iteritems():
             yield (prop, func(self))
@@ -121,7 +121,7 @@ class Container(PropertyMixin, MPDObjectMixin):
         self.is_base = is_base
         # this MUST be zero for the remote to "see" the playlist
         self.parent_container_id = 0
-        
+
         if self.is_base:
             self.items = self.mpd.items
         else:
@@ -225,17 +225,20 @@ class Album(PropertyMixin, MPDObjectMixin):
         return self.item_count
 
 class Item(PropertyMixin, MPDObjectMixin):
-    def __init__(self, id, name, uri, artist, album, track=1):
+    def __init__(self, id, name, uri, artist, album, track=1, year=None, composer=None, genre=None, time=0):
         MPDObjectMixin.__init__(self, id)
         self.uri = uri
         self.name = name
         self.artist = self.mpd.artists.first({'dmap.itemname': artist})
         self.album = self.mpd.albums.first({'dmap.itemname': album, 'dmap.songartist': artist})
-        self.track = track 
-
+        self.track = track
         self.item_kind = 2
         self.content_description = ''
         self.has_video = 0
+        self.year = year or ''
+        self.composer = util.de_listify(composer or '')
+        self.genre = util.de_listify(genre or '')
+        self.time = time
 
     def __str__(self):
         return 'Item: %s' % self.name
@@ -269,6 +272,10 @@ class Item(PropertyMixin, MPDObjectMixin):
     def get_artist(self):
         return self.artist.name
 
+    @property_getter('daap.songartistid')
+    def get_artist_id(self):
+        return self.artist.id
+
     @property_getter('daap.songcontentdescription')
     def get_content_description(self):
         return self.content_description
@@ -276,6 +283,22 @@ class Item(PropertyMixin, MPDObjectMixin):
     @property_getter('com.apple.itunes.has-video')
     def get_has_video(self):
         return self.has_video
+
+    @property_getter('daap.songcomposer')
+    def get_composer(self):
+        return self.composer
+
+    @property_getter('daap.songyear')
+    def get_year(self):
+        return self.year
+
+    @property_getter('daap.songgenre')
+    def get_genre(self):
+        return self.genre
+
+    @property_getter('daap.songtime')
+    def get_time(self):
+        return self.time
 
 class IndexedCollection(object):
     def __init__(self, cls):
@@ -441,10 +464,14 @@ class MPD(PropertyMixin, MPDMixin):
                 track = 1
 
             self.items.add_new(
-                name = i['title'],
-                uri = i['file'],
-                artist = i['artist'],
-                album = i['album'],
+                name = i.get('title', ''),
+                uri = i.get('file', ''),
+                artist = i.get('artist', ''),
+                album = i.get('album', ''),
+                time = int(i.get('time', 0)),
+                composer = i.get('composer', ''),
+                genre = i.get('genre', ''),
+                year = i.get('date', ''),
                 track = track)
 
 
@@ -585,6 +612,9 @@ class MPD(PropertyMixin, MPDMixin):
     def get_current_track(self):
         return self.execute('currentsong')
 
+    def get_current_status(self):
+        return self.execute('status')
+
     def get_current_time(self):
         status = self.execute('status')
         try:
@@ -603,4 +633,20 @@ class MPD(PropertyMixin, MPDMixin):
             'dmap.songalbumartist': songinfo['artist']
         })
         return album.id
+
+    @property_getter('daap.songartistid')
+    def get_current_artist_id(self):
+        songinfo = self.execute('currentsong')
+        artist = self.artists.first({
+            'dmap.itemname': songinfo['artist'],
+        })
+        return artist.id
+
+    def get_current_item(self):
+        songinfo = self.execute('currentsong')
+        return self.items.first({
+            'dmap.itemname': songinfo['title'],
+            'dmap.songartist': songinfo['artist'],
+            'dmap.songalbum': songinfo['album'],
+        })
 

@@ -23,6 +23,7 @@
 import base64
 import Image
 import logging
+import os.path
 import xml.dom.minidom
 import re
 import StringIO
@@ -99,13 +100,17 @@ def get_lastfm_url(artist, album):
 
     return None
 
+def serialize_image(img, width, height):
+    buf = StringIO.StringIO()
+    img.resize((width, height), Image.ANTIALIAS).save(buf, 'PNG')
+    return buf.getvalue()
+
 class AlbumArt(object):
     def __init__(self, artist, album):
         self.artist = artist
         self.album = album
 
     def get_png(self, width=320, height=320):
-        output = StringIO.StringIO()
         try:
             buf = StringIO.StringIO(self._get_cached_artwork())
             img = Image.open(buf).convert('RGB')
@@ -119,8 +124,7 @@ class AlbumArt(object):
             except ArtNotFoundError:
                 not_found.add(key)
                 raise
-        img.resize((width, height), Image.ANTIALIAS).save(output, 'PNG')
-        return output.getvalue()
+        return serialize_image(img, width, height)
 
     def _get_cached_artwork(self):
         record = db.AlbumArtRecord.find(artist=util.clean_name(self.artist),
