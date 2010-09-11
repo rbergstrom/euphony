@@ -460,7 +460,7 @@ class NowPlayingArtHandler(DMAPRequestHandler):
             self.set_header('Content-Type', 'image/png')
             self.write(artwork.get_png(width, height))
         except (KeyError, albumart.ArtNotFoundError):
-            raise web.HTTPError(204)
+            raise web.HTTPError(404)
 
 class PlaySpecHandler(DMAPRequestHandler):
     def get(self):
