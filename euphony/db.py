@@ -20,48 +20,91 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from pymongo import Connection
+
+import sqlite3
 
 from config import current as config
 
-__all__ = ['db']
+__all__ = ['PairingRecord', 'AlbumArtRecord']
 
-conn = Connection(config.db.host, int(config.db.port))
-db = conn[config.db.name]
+db = sqlite3.connect(config.db.path)
+db.row_factory = sqlite3.Row
 
-def record_to_kwargs(record):
-    return dict([(str(k), v) for k, v in record.iteritems() if not k.startswith('_')])
+class RecordMeta(type):
+    def __new__(cls, name, bases, attrs):
+        obj = super(RecordMeta, cls).__new__(cls, name, bases, attrs)
+        obj.build_table()
+        return obj
 
-class BasicRecord(object):
-    collection = None
+class PairingRecord(object):
+    __metaclass__ = RecordMeta
 
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
+    def __init__(self, guid):
+        self.guid = guid
 
     def insert(self):
-        global db
-        db[self.collection].insert(self.__dict__)
+        db.execute('INSERT INTO pairing (guid) VALUES (?)', (self.guid,))
+        db.commit()
 
     @classmethod
-    def find(cls, **kwargs):
-        global db
-        record = db[cls.collection].find_one(kwargs)
-        if record is not None:
-            return cls(**record_to_kwargs(record))
-        else:
-            return None
+    def find(cls, guid):
+        for row in db.execute('SELECT * FROM pairing WHERE guid=?', (guid,)):
+            return cls(row['guid'])
+        return None
 
     @classmethod
-    def add(cls, **kwargs):
-        record = cls.find(**kwargs)
+    def add(cls, guid):
+        record = cls.find(guid)
         if record is None:
-            record = cls(**kwargs)
+            record = cls(guid)
             record.insert()
         return record
 
+    @classmethod
+    def build_table(cls):
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS pairing (
+               guid INTEGER UNIQUE
+            )''')
+        db.commit()
 
-class PairingRecord(BasicRecord):
-    collection = 'pairing'
+class AlbumArtRecord(object):
+    __metaclass__ = RecordMeta
 
-class AlbumArtRecord(BasicRecord):
-    collection = 'albumart'
+    def __init__(self, artist, album, data):
+        self.artist = artist
+        self.album = album
+        self.data = data
+
+    def insert(self):
+        db.execute('''
+            INSERT INTO albumart (artist, album, data)
+            VALUES (?, ?, ?)
+        ''', (self.artist, self.album, self.data))
+        db.commit()
+
+    @classmethod
+    def find(cls, artist, album):
+        for row in db.execute('SELECT * FROM albumart WHERE artist=? AND album=?', (artist, album)):
+            return cls(row['artist'], row['album'], row['data'])
+        return None
+
+    @classmethod
+    def add(cls, artist, album, data):
+        record = cls.find(artist, album)
+        if record is None:
+            record = cls(artist, album, data)
+            record.insert()
+        return record
+
+    @classmethod
+    def build_table(cls):
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS albumart (
+                artist TEXT,
+                album TEXT,
+                data BLOB,
+                PRIMARY KEY (artist, album) ON CONFLICT REPLACE
+            )''')
+        db.commit()
+

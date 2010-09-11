@@ -37,7 +37,7 @@ import query
 import util
 
 from config import current as config
-from db import db, PairingRecord
+from db import PairingRecord
 from mpdplayer import MPD
 
 mpd = MPD(str(config.mpd.host), int(config.mpd.port))
@@ -102,7 +102,7 @@ class ServerInfoHandler(DMAPRequestHandler):
 class LoginHandler(DMAPRequestHandler):
     def get(self):
         guid = int(self.get_argument('pairing-guid'), 16)
-        if db.pairing.find_one({'guid': guid}) is not None:
+        if PairingRecord.find(guid) is not None:
             sid = util.generate_sessionid(guid)
             node = dacpy.types.build_node(('mlog', [
                 ('mstt', 200),
@@ -452,8 +452,8 @@ class PlayStatusUpdateHandler(DMAPRequestHandler):
 
 class NowPlayingArtHandler(DMAPRequestHandler):
     def get(self):
-        width = int(self.get_argument('mw', 320))
-        height = int(self.get_argument('mh', 320))
+        width = int(self.get_argument('mw', 300))
+        height = int(self.get_argument('mh', 300))
         try:
             songinfo = mpd.get_current_track()
             artwork = albumart.AlbumArt(songinfo['artist'], songinfo['album'])

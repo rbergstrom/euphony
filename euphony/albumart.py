@@ -110,7 +110,7 @@ class AlbumArt(object):
         self.artist = artist
         self.album = album
 
-    def get_png(self, width=320, height=320):
+    def get_png(self, width=300, height=300):
         try:
             buf = StringIO.StringIO(self._get_cached_artwork())
             img = Image.open(buf).convert('RGB')
@@ -135,6 +135,7 @@ class AlbumArt(object):
             raise ArtNotFoundError(self.album, self.artist)
 
     def _cache_artwork(self, image_data):
+        logging.info('Caching artwork for \'%s\' by \'%s\'' % (self.album, self.artist))
         db.AlbumArtRecord.add(artist=util.clean_name(self.artist),
                               album=util.clean_name(self.album),
                               data=base64.b64encode(image_data))
@@ -144,23 +145,28 @@ class AlbumArt(object):
         best = None
         for func in (get_lastfm_url, get_albumart_url):
             url = func(self.artist, self.album)
+            logging.debug('Trying image: \'%s\'' % url)
             if url is not None:
                 try:
                     img_data = urllib2.urlopen(url).read()
-                    self._cache_artwork(img_data)
                     img = Image.open(StringIO.StringIO(img_data))
 
-                    if img.size >= (min_size, min_size):
+                    if max(img.size) >= min_size:
+                        self._cache_artwork(img_data)
                         return img
+                    else:
+                        logging.debug('Too small %d - looking for %d' %
+                                (max(img.size), min_size))
 
-                    if (best is None) or (img.size > best.size):
-                        best = img
+                    if (best is None) or (img.size > best[0].size):
+                        best = (img, img_data)
 
                 except urllib2.URLError:
                     pass
 
         if best is not None:
-            return best
+            self._cache_artwork(best[1])
+            return best[0]
         else:
             raise ArtNotFoundError(self.artist, self.album)
 
