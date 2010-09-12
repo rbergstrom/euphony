@@ -50,7 +50,8 @@ class EuphonyServer(object):
             # WEB
             (r'/web/status/?', handlers.web.StatusDashboardHandler),
             (r'/web/status/json', handlers.web.CurrentStatusJsonHandler),
-            (r'/web/albumart/([0-9]+)x([0-9]+)/nowplaying', handlers.web.NowPlayingArtHandler),
+            (r'/web/playlists/(\d+)/json', handlers.web.PlaylistJsonHandler),
+            (r'/web/albums/(\d+)/cover/(\d+)x(\d+)/', handlers.web.AlbumArtHandler),
             (r'/web/pairing/?', handlers.web.PairingHandler),
             (r'/web/pairing/remotes', handlers.web.ListRemotesHandler),
 

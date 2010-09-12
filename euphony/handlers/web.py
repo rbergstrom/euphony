@@ -68,7 +68,7 @@ class StatusDashboardHandler(JinjaRequestHandler):
         args = {
             'server_name': config.server.name,
         }
-        self.render('status_dashboard.html', **args)
+        self.render('status.html', **args)
 
 class CurrentStatusJsonHandler(JinjaRequestHandler):
     def get(self):
@@ -78,34 +78,35 @@ class CurrentStatusJsonHandler(JinjaRequestHandler):
         timeinfo = status.get('time', '0:0').split(':')
 
         self.write({
-            'album': {
-                'name': track.album.name,
-                'artist': track.album.artist.name,
-            },
-            'track': {
-                'name': track.name,
-                'artist': track.artist.name,
-                'composer': track.composer,
-                'genre': track.genre,
-                'length': track.time,
-                'year': track.year,
-            },
+            'track': track.serialize_to_json(),
+            'playlist': [x.serialize_to_json() for x in mpd.get_current_playlist()],
             'status': {
+                'playlist_index': int(status.get('song', 0)),
+                'next_index': int(status.get('nextsong', 0)),
                 'time': int(timeinfo[0]),
                 'volume': int(status.get('volume', 0)),
             },
         })
 
-class NowPlayingArtHandler(JinjaRequestHandler):
-    def get(self, width, height):
+class PlaylistJsonHandler(JinjaRequestHandler):
+    def get(self, playlist_id):
+        pl = mpd.containers.get_by_id(int(playlist_id))
+
+        if pl is None:
+            raise web.HTTPError(404)
+
+        self.write(pl.serialize_to_json())
+
+class AlbumArtHandler(JinjaRequestHandler):
+    def get(self, album_id, width, height):
         width = int(width)
         height = int(height)
         self.set_header('Content-Type', 'image/png')
         try:
-            songinfo = mpd.get_current_track()
-            artwork = albumart.AlbumArt(songinfo['artist'], songinfo['album'])
+            album = mpd.albums.get_by_id(int(album_id))
+            artwork = albumart.AlbumArt(album.artist.name, album.name)
             self.write(artwork.get_png(width, height))
-        except (KeyError, albumart.ArtNotFoundError):
+        except (TypeError, albumart.ArtNotFoundError):
             self.write(albumart.serialize_image(Image.open(PLACEHOLDER_IMG).convert('RGB'), width, height))
 
 # Pairing

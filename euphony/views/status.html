@@ -1,0 +1,32 @@
+{% extends "master.html" %}
+
+{% block title %}{{ server_name }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<script type="text/javascript" src="/static/js/jquery.reflect.js"></script>
+<script type="text/javascript">
+    function refreshStatus() {
+        $.getJSON('/web/status/json', function(data) {
+            $('#album-cover img').attr('src', '/web/albums/' + data.track.album.id + '/cover/320x320/');
+            $.each(data.playlist, function() {
+                $('#playlist').append($('<ul/>').html(this.name));
+            });
+        });
+    }
+
+    $(document).ready(function() {
+        refreshStatus();
+    });
+</script>
+{% endblock %}
+
+{% block body %}
+<div id="nowplaying">
+    <div id="album-cover">
+        <img />
+    </div>
+    <ul id="playlist"></ul>
+</div>
+{% endblock %}
+

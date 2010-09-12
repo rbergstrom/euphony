@@ -130,22 +130,27 @@ class Container(PropertyMixin, MPDObjectMixin):
             for i in [x for x in self.mpd.items if x.uri in plfiles]:
                 self.items.add_item(i)
 
-        self.item_count = len(self.items)
-
     def __str__(self):
         return 'Container: %s' % self.name
 
     def __unicode__(self):
         return u'Container: %s' % self.name
 
+    def serialize_to_json(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'items': [i.serialize_to_json() for i in self.items],
+        }
+
     def add_item(self, item):
+        self.items.add_item(item)
         self.mpd.execute('playlistadd', self.name, item.uri)
 
     def get_item_index(self, itemid):
-        items = self.fetch_items()
-        for i in range(len(items)):
-            if items[i].id == itemid:
-                return i
+        for (index, item) in enumerate(self.items):
+            if item.id == itemid:
+                return index
         return -1
 
     @property_getter('dmap.itemname')
@@ -159,7 +164,7 @@ class Container(PropertyMixin, MPDObjectMixin):
 
     @property_getter('dmap.itemcount')
     def get_item_count(self):
-        return self.item_count
+        return len(self.items)
 
     @property_getter('dmap.parentcontainerid')
     def get_parent_container_id(self):
@@ -184,6 +189,12 @@ class Artist(PropertyMixin, MPDObjectMixin):
     def __unicode__(self):
         return u'Artist: %s' % self.name
 
+    def serialize_to_json(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+        }
+
     @property_getter('dmap.itemname')
     def get_name(self):
         return self.name
@@ -205,6 +216,13 @@ class Album(PropertyMixin, MPDObjectMixin):
 
     def __unicode__(self):
         return u'Album: %s' % self.name
+
+    def serialize_to_json(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'artist': self.artist.serialize_to_json(),
+        }
 
     @property_getter('dmap.itemname')
     def get_name(self):
@@ -245,6 +263,19 @@ class Item(PropertyMixin, MPDObjectMixin):
 
     def __unicode__(self):
         return u'Item: %s' % self.name
+
+    def serialize_to_json(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'artist': self.artist.serialize_to_json(),
+            'album': self.album.serialize_to_json(),
+            'track': self.track,
+            'year': self.year,
+            'composer': self.composer,
+            'genre': self.genre,
+            'time': self.time,
+        }
 
     @property_getter('dmap.itemname')
     def get_name(self):
@@ -382,7 +413,7 @@ class MPDIdler(threading.Thread, MPDMixin):
                 for callback in self._callbacks:
                     callback()
 
-class MPD(PropertyMixin, MPDMixin):  
+class MPD(PropertyMixin, MPDMixin):
     def __init__(self, host, port, password=None):
         if not hasattr(self.__class__, '_instance'):
             MPD._instance = self
@@ -649,4 +680,12 @@ class MPD(PropertyMixin, MPDMixin):
             'dmap.songartist': songinfo['artist'],
             'dmap.songalbum': songinfo['album'],
         })
+
+    def get_current_playlist(self):
+        return (
+            self.items.first({
+                'dmap.itemname': x['title'],
+                'dmap.songartist': x['artist'],
+                'dmap.songalbum': x['album'],
+            }) for x in self.execute('playlistinfo'))
 

@@ -177,7 +177,7 @@ class ContainerItemsHandler(DMAPRequestHandler):
         else:
             items = list(container.items)
 
-        items.sort(key=operator.attrgetter('track'))
+        #items.sort(key=operator.attrgetter('track'))
 
         item_nodes = [('mlit', fetch_properties(properties, i)) for i in items]
 
@@ -468,7 +468,7 @@ class PlaySpecHandler(DMAPRequestHandler):
         container_spec = query_to_dict(self.get_argument('container-spec'))
         item_spec = query_to_dict(self.get_argument('container-item-spec'))
         try:
-            container = Container.get(int(container_spec['dmap.persistentid'], 16))
+            container = mpd.containers.get_by_id(int(container_spec['dmap.persistentid'], 16))
             index = container.get_item_index(int(item_spec['dmap.containeritemid'], 16))
             mpd.clear_current()
             mpd.load_playlist(container.name)

@@ -1,0 +1,57 @@
+/* Reset */
+
+* {
+    padding: 0;
+    margin: 0;
+    border: none;
+}
+
+address, caption, cite, code, dfn, em, 
+h1, h2, h3, h4, h5, h6, strong, th, var {
+    font-weight: normal;
+    font-style: normal;
+}
+
+ul {
+	list-style: none;
+}
+
+caption, th {
+	text-align: left;
+}
+
+h1, h2, h3, h4, h5, h6 {
+	font-size: 1.0em;
+}
+
+table {
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+
+fieldset, img, abbr {
+	border: 0;
+}
+
+a, ins {
+	text-decoration: none;
+}
+
+/* Styles */
+
+@font-face {
+    font-family: GraublauWeb;
+    src: url('fonts/GraublauWeb.otf') format('opentype');
+}
+
+@font-face {
+    font-family: GraublauWebBold;
+    src: url('fonts/GraublauWebBold.otf') format('opentype');
+}
+
+body {
+    font: 0.8125em Verdana;
+    line-height: 1;
+    color: #333;
+}
+
