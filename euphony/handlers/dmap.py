@@ -177,7 +177,8 @@ class ContainerItemsHandler(DMAPRequestHandler):
         else:
             items = list(container.items)
 
-        #items.sort(key=operator.attrgetter('track'))
+        if 'daap.songalbumid' in query_string:
+            items.sort(key=operator.attrgetter('track'))
 
         item_nodes = [('mlit', fetch_properties(properties, i)) for i in items]
 
@@ -411,6 +412,8 @@ class SetPropertyHandler(DMAPRequestHandler):
             ret = mpd.set_property(prop, values[-1])
             if ret is None:
                 logging.info("Unknown Property: %s (Value = %s)" % (prop, values))
+        raise web.HTTPError(204)
+
 
 class PlayStatusUpdateHandler(DMAPRequestHandler):
     @web.asynchronous

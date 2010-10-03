@@ -125,10 +125,11 @@ class Container(PropertyMixin, MPDObjectMixin):
         if self.is_base:
             self.items = self.mpd.items
         else:
-            plfiles = set(self.mpd.execute('listplaylist', self.name))
+            plfiles = self.mpd.execute('listplaylist', self.name)
             self.items = IndexedCollection(Item)
-            for i in [x for x in self.mpd.items if x.uri in plfiles]:
-                self.items.add_item(i)
+            itemmap = dict([(x.uri, x) for x in self.mpd.items if x.uri in plfiles])
+            for f in plfiles:
+                self.items.add_item(itemmap[f])
 
     def __str__(self):
         return 'Container: %s' % self.name
@@ -493,17 +494,19 @@ class MPD(PropertyMixin, MPDMixin):
                 track = int(str(i['track']).split('/')[0])
             except KeyError:
                 track = 1
-
-            self.items.add_new(
-                name = i.get('title', ''),
-                uri = i.get('file', ''),
-                artist = i.get('artist', ''),
-                album = i.get('album', ''),
-                time = int(i.get('time', 0)),
-                composer = i.get('composer', ''),
-                genre = i.get('genre', ''),
-                year = i.get('date', ''),
-                track = track)
+            try:
+                self.items.add_new(
+                    name = i.get('title', ''),
+                    uri = i.get('file', ''),
+                    artist = i.get('artist', ''),
+                    album = i.get('album', ''),
+                    time = int(i.get('time', 0)),
+                    composer = i.get('composer', ''),
+                    genre = i.get('genre', ''),
+                    year = i.get('date', ''),
+                    track = track)
+            except Exception, e:
+                logging.warning('Error adding %r: %s', i, e)
 
 
     def update_db(self):
@@ -558,6 +561,7 @@ class MPD(PropertyMixin, MPDMixin):
         try:
             songnum = self.execute('status')['song']
             self.execute('seek', songnum, int(int(value) / 1000))
+            return True
         except KeyError:
             pass
 
@@ -639,6 +643,7 @@ class MPD(PropertyMixin, MPDMixin):
     @property_setter('dmcp.volume')
     def set_volume(self, value):
         self.execute('setvol', str(value))
+        return True
 
     def get_current_track(self):
         return self.execute('currentsong')
