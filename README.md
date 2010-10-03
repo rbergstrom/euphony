@@ -18,7 +18,6 @@ Euphony currently has several dependencies:
 
 * [dacpy][dacpy] - Python DACP interface (originally part of Euphony)
 * [Tornado][tornado] - Provides the web framework and HTTP server.
-* [MongoDB][mongodb] and [PyMongo][pymongo] - Stores pairing codes and cover art.
 * [Python Imaging Library][pil] - For resizing and converting album art.
 * [python-daemon][pydaemon] - Used to daemonize the process. Only needed for run_daemon.py.
 
@@ -27,7 +26,6 @@ Python library.
 
   [dacpy]: http://www.github.com/rbergstrom/dacpy
   [tornado]: http://www.tornadoweb.org/
-  [mongodb]: http://www.mongodb.org/
   [pymongo]: http://pypi.python.org/pypi/pymongo/
   [pil]: http://www.pythonware.com/products/pil/
   [pydaemon]: http://pypi.python.org/pypi/python-daemon/
