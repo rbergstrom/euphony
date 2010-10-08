@@ -165,7 +165,7 @@ class ContainerItemsHandler(DMAPRequestHandler):
         properties = self.get_argument('meta').split(',')
         sort_type = self.get_argument('sort', None)
         query_type = self.get_argument('type', None)
-        query_string = self.get_argument('query', None)
+        query_string = self.get_argument('query', '')
 
         container = mpd.containers.get_by_id(int(container_id))
 
