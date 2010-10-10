@@ -249,7 +249,7 @@ class Item(PropertyMixin, MPDObjectMixin):
         self.uri = uri
         self.name = name
         self.artist = self.mpd.artists.first({'dmap.itemname': artist})
-        self.album = self.mpd.albums.first({'dmap.itemname': album, 'dmap.songartist': artist})
+        self.album = self.mpd.albums.first({'dmap.itemname': album, 'daap.songartist': artist})
         self.track = track
         self.item_kind = 2
         self.content_description = ''
@@ -301,6 +301,7 @@ class Item(PropertyMixin, MPDObjectMixin):
         return self.album.id
 
     @property_getter('daap.songartist')
+    @property_getter('daap.songalbumartist')
     def get_artist(self):
         return self.artist.name
 
@@ -666,7 +667,7 @@ class MPD(PropertyMixin, MPDMixin):
         songinfo = self.execute('currentsong')
         album = self.albums.first({
             'dmap.itemname': songinfo['album'],
-            'dmap.songalbumartist': songinfo['artist']
+            'daap.songalbumartist': songinfo['artist'],
         })
         return album.id
 
@@ -682,15 +683,15 @@ class MPD(PropertyMixin, MPDMixin):
         songinfo = self.execute('currentsong')
         return self.items.first({
             'dmap.itemname': songinfo['title'],
-            'dmap.songartist': songinfo['artist'],
-            'dmap.songalbum': songinfo['album'],
+            'daap.songartist': songinfo['artist'],
+            'daap.songalbum': songinfo['album'],
         })
 
     def get_current_playlist(self):
         return (
             self.items.first({
                 'dmap.itemname': x['title'],
-                'dmap.songartist': x['artist'],
-                'dmap.songalbum': x['album'],
+                'daap.songartist': x['artist'],
+                'daap.songalbum': x['album'],
             }) for x in self.execute('playlistinfo'))
 

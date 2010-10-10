@@ -61,6 +61,7 @@ class EuphonyServer(object):
             (r'/update', handlers.dmap.UpdateHandler),
             (r'/databases', handlers.dmap.DatabaseHandler),
             (r'/databases/([0-9]+)/containers', handlers.dmap.ContainersHandler),
+            (r'/databases/([0-9]+)/items', handlers.dmap.DatabaseItemsHandler),
             (r'/databases/([0-9]+)/containers/([0-9]+)/items', handlers.dmap.ContainerItemsHandler),
             (r'/databases/([0-9]+)/containers/([0-9]+)/edit', handlers.dmap.ContainerEditHandler),
             (r'/databases/([0-9]+)/edit', handlers.dmap.DatabaseEditHandler),

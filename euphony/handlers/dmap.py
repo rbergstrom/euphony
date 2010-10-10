@@ -145,6 +145,35 @@ class DatabaseHandler(DMAPRequestHandler):
         ]))
         self.write(node.serialize())
 
+class DatabaseItemsHandler(DMAPRequestHandler):
+    def get(self, db):
+        properties = self.get_argument('meta').split(',')
+        sort_type = self.get_argument('sort', None)
+        query_type = self.get_argument('type', None)
+        query_string = self.get_argument('query', '')
+
+        container = mpd.root_playlist
+
+        if query_string:
+            items = list(container.items.query(query_string))
+        else:
+            items = list(container.items)
+
+        if 'daap.songalbumid' in query_string:
+            items.sort(key=operator.attrgetter('track'))
+
+        item_nodes = [('mlit', fetch_properties(properties, i)) for i in items]
+
+        node = dacpy.types.build_node(('apso', [
+            ('mstt', 200),
+            ('muty', 0),
+            ('mtco', len(item_nodes)),
+            ('mrco', len(item_nodes)),
+            ('mlcl', item_nodes),
+        ]))
+
+        self.write(node.serialize())
+
 class ContainersHandler(DMAPRequestHandler):
     def get(self, db):
         properties = self.get_argument('meta').split(',')
